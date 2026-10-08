@@ -1,0 +1,642 @@
+# SPDX-FileCopyrightText: 2026 Contributors to the Power Grid Model project <powergridmodel@lfenergy.org>
+#
+# SPDX-License-Identifier: MPL-2.0
+
+schema_version: 2
+name: pgm_realism_validation_rules
+purpose: >-
+  Configurable heuristic rules for plausibility and realism checks across input,
+  update, and output datasets.
+
+execution_order:
+  - pgm_structural_validation
+  - realism_screening
+
+pgm_structural_validation:
+  owner: power-grid-model
+  apis:
+    - validate_input_data
+    - validate_batch_data
+  note: >-
+    Structural and schema-level checks are intentionally excluded from this file
+    to avoid duplicate validation logic.
+
+classification:
+  check_classes:
+    heuristic:
+      definition: Context-dependent plausibility rules.
+      default_confidence: medium
+
+  confidence_levels:
+    high: Strongly suspicious in most practical grids.
+    medium: Often suspicious but can be valid in specific contexts.
+    low: Weak prior; requires local engineering context.
+
+profiles:
+  default:
+    description: Generic mixed-distribution profile.
+    thresholds:
+      voltage:
+        u_pu_low_warn: 0.90
+        u_pu_low_error: 0.85
+        u_pu_high_warn: 1.10
+        u_pu_high_error: 1.15
+        regulator_u_set_pu_min: 0.90
+        regulator_u_set_pu_max: 1.10
+        regulator_u_band_pu_min: 0.005
+        regulator_u_band_pu_max: 0.10
+        regulator_u_set_step_pu_warn: 0.03
+      loading:
+        branch_warn: 1.00
+        branch_severe: 1.20
+      line:
+        r1_abs_ohm_warn: 50.0
+        x1_abs_ohm_warn: 50.0
+        tan_abs_warn: 0.30
+        r0_r1_ratio_min: 0.10
+        r0_r1_ratio_max: 10.0
+        x0_x1_ratio_min: 0.10
+        x0_x1_ratio_max: 10.0
+        c0_c1_ratio_min: 0.10
+        c0_c1_ratio_max: 10.0
+      asym_line:
+        mutual_to_self_abs_max: 1.0
+        reciprocity_relative_tol: 0.20
+      transformer:
+        voltage_ratio_warn: 50.0
+        voltage_ratio_error: 200.0
+        uk_pu_warn_min: 0.01
+        uk_pu_warn_max: 0.30
+        pk_to_sn_warn_max: 0.05
+        i0_pu_warn_max: 0.10
+        tap_size_pu_warn_min: 0.001
+        tap_size_pu_warn_max: 0.05
+        tap_span_steps_warn: 40
+      three_winding_transformer:
+        sn_side_ratio_warn: 20.0
+        uk_pair_ratio_warn: 3.0
+      generic_branch:
+        k_warn_min: 0.8
+        k_warn_max: 1.2
+        theta_abs_rad_warn: 0.523599
+      source:
+        u_ref_pu_min: 0.90
+        u_ref_pu_max: 1.10
+        rx_ratio_warn_min: 0.01
+        rx_ratio_warn_max: 2.0
+        z01_ratio_warn_min: 0.1
+        z01_ratio_warn_max: 10.0
+        sk_to_total_load_mva_warn_min: 1.5
+      load_gen:
+        power_factor_abs_warn_min: 0.50
+        q_to_p_abs_warn_max: 2.0
+        phase_imbalance_ratio_warn: 2.0
+        max_step_change_fraction_warn: 0.50
+      shunt:
+        g1_to_b1_abs_ratio_warn_max: 0.50
+      sensor:
+        sigma_abs_min_warn: 1.0e-9
+        sigma_abs_max_warn: 1.0e6
+        min_measurement_density_warn: 0.05
+      fault:
+        r_f_abs_ohm_warn_max: 1000.0
+        x_f_abs_ohm_warn_max: 1000.0
+        max_fault_count_per_scenario_warn: 3
+      update:
+        max_status_flip_fraction_warn: 0.30
+        max_deenergized_fraction_warn: 0.40
+        max_tap_step_jump_warn: 5
+        max_total_load_change_fraction_warn: 0.50
+        max_total_gen_change_fraction_warn: 0.50
+      output:
+        max_islanded_fraction_warn: 0.20
+        max_source_to_total_load_ratio_warn: 5.0
+        max_net_loss_to_total_load_ratio_warn: 0.20
+        max_residual_normalized_warn: 6.0
+        min_energized_fraction_warn: 0.60
+
+  distribution_mv:
+    description: Medium-voltage distribution operations.
+    threshold_overrides:
+      voltage:
+        u_pu_low_warn: 0.92
+        u_pu_high_warn: 1.08
+      loading:
+        branch_severe: 1.15
+      update:
+        max_status_flip_fraction_warn: 0.20
+      output:
+        max_net_loss_to_total_load_ratio_warn: 0.15
+
+  distribution_hv:
+    description: High-voltage distribution/sub-transmission profile.
+    threshold_overrides:
+      voltage:
+        u_pu_low_warn: 0.95
+        u_pu_high_warn: 1.05
+      loading:
+        branch_severe: 1.10
+      output:
+        max_net_loss_to_total_load_ratio_warn: 0.10
+
+  transmission:
+    description: Transmission operations profile.
+    threshold_overrides:
+      voltage:
+        u_pu_low_warn: 0.95
+        u_pu_high_warn: 1.05
+        u_pu_low_error: 0.90
+        u_pu_high_error: 1.10
+      line:
+        r1_abs_ohm_warn: 100.0
+        x1_abs_ohm_warn: 200.0
+      source:
+        sk_to_total_load_mva_warn_min: 3.0
+      update:
+        max_status_flip_fraction_warn: 0.10
+
+rules:
+  - id: R-HEU-001
+    enabled: true
+    check_class: heuristic
+    confidence: low
+    severity: warning
+    stage: [input]
+    target: line
+    description: Very high absolute line resistance/reactance is unusual.
+    thresholds:
+      r1_abs_ohm_warn: profiles.default.thresholds.line.r1_abs_ohm_warn
+      x1_abs_ohm_warn: profiles.default.thresholds.line.x1_abs_ohm_warn
+    recommended_action: Verify units, length scaling, and data source conversion.
+
+  - id: R-HEU-002
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: line
+    description: Line tan-delta appears unusually high.
+    thresholds:
+      tan_abs_warn: profiles.default.thresholds.line.tan_abs_warn
+    recommended_action: Recheck dielectric-loss assumptions and parameter source.
+
+  - id: R-HEU-003
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: sequence_parameters
+    description: Zero-sequence to positive-sequence ratios appear unrealistic.
+    thresholds:
+      r0_r1_ratio_min: profiles.default.thresholds.line.r0_r1_ratio_min
+      r0_r1_ratio_max: profiles.default.thresholds.line.r0_r1_ratio_max
+      x0_x1_ratio_min: profiles.default.thresholds.line.x0_x1_ratio_min
+      x0_x1_ratio_max: profiles.default.thresholds.line.x0_x1_ratio_max
+      c0_c1_ratio_min: profiles.default.thresholds.line.c0_c1_ratio_min
+      c0_c1_ratio_max: profiles.default.thresholds.line.c0_c1_ratio_max
+    recommended_action: Recheck sequence extraction and grounding assumptions.
+
+  - id: R-HEU-004
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: asym_line
+    description: Asymmetric line mutual terms are too large relative to self terms.
+    thresholds:
+      mutual_to_self_abs_max: profiles.default.thresholds.asym_line.mutual_to_self_abs_max
+    recommended_action: Verify phase-coupling matrix construction and source units.
+
+  - id: R-HEU-005
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: asym_line
+    description: Asymmetric line matrix reciprocity is weak (off-diagonal mismatch).
+    thresholds:
+      reciprocity_relative_tol: profiles.default.thresholds.asym_line.reciprocity_relative_tol
+    recommended_action: Recheck matrix assembly and phase ordering.
+
+  - id: R-HEU-006
+    enabled: true
+    check_class: heuristic
+    confidence: high
+    severity: warning
+    stage: [input]
+    target: transformer
+    description: Extreme transformer voltage ratio is suspicious.
+    thresholds:
+      voltage_ratio_warn: profiles.default.thresholds.transformer.voltage_ratio_warn
+      voltage_ratio_error: profiles.default.thresholds.transformer.voltage_ratio_error
+    recommended_action: Verify side voltages, units, and intended transformer class.
+
+  - id: R-HEU-007
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: transformer
+    description: Transformer uk/pk/i0 values appear outside typical engineering ranges.
+    thresholds:
+      uk_pu_warn_min: profiles.default.thresholds.transformer.uk_pu_warn_min
+      uk_pu_warn_max: profiles.default.thresholds.transformer.uk_pu_warn_max
+      pk_to_sn_warn_max: profiles.default.thresholds.transformer.pk_to_sn_warn_max
+      i0_pu_warn_max: profiles.default.thresholds.transformer.i0_pu_warn_max
+    recommended_action: Validate against nameplate or planning-model assumptions.
+
+  - id: R-HEU-008
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: transformer
+    description: Tap settings are unusual (step size/span/nominal placement).
+    thresholds:
+      tap_size_pu_warn_min: profiles.default.thresholds.transformer.tap_size_pu_warn_min
+      tap_size_pu_warn_max: profiles.default.thresholds.transformer.tap_size_pu_warn_max
+      tap_span_steps_warn: profiles.default.thresholds.transformer.tap_span_steps_warn
+    recommended_action: Recheck tap changer settings and utility operation policy.
+
+  - id: R-HEU-009
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: transformer
+    description: Winding and clock configuration is rare or suspicious in utility practice.
+    recommended_action: Confirm with equipment standard and manufacturer data.
+
+  - id: R-HEU-010
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: three_winding_transformer
+    description: Three-winding transformer side ratings are highly imbalanced.
+    thresholds:
+      sn_side_ratio_warn: profiles.default.thresholds.three_winding_transformer.sn_side_ratio_warn
+    recommended_action: Confirm intended tertiary rating and study objective.
+
+  - id: R-HEU-011
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: three_winding_transformer
+    description: Pairwise three-winding uk values are highly inconsistent.
+    thresholds:
+      uk_pair_ratio_warn: profiles.default.thresholds.three_winding_transformer.uk_pair_ratio_warn
+    recommended_action: Verify conversion from manufacturer test data.
+
+  - id: R-HEU-012
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: generic_branch
+    description: Generic-branch off-nominal ratio and angle are outside typical ranges.
+    thresholds:
+      k_warn_min: profiles.default.thresholds.generic_branch.k_warn_min
+      k_warn_max: profiles.default.thresholds.generic_branch.k_warn_max
+      theta_abs_rad_warn: profiles.default.thresholds.generic_branch.theta_abs_rad_warn
+    recommended_action: Recheck if transformer model is more appropriate.
+
+  - id: R-HEU-013
+    enabled: true
+    check_class: heuristic
+    confidence: low
+    severity: warning
+    stage: [input]
+    target: generic_branch
+    description: Generic-branch parameters suggest near-singular or unrealistically stiff element.
+    recommended_action: Verify PI-equivalent parameter derivation and scaling.
+
+  - id: R-HEU-014
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: source
+    description: Source u_ref/rx_ratio/z01_ratio values are atypical.
+    thresholds:
+      u_ref_pu_min: profiles.default.thresholds.source.u_ref_pu_min
+      u_ref_pu_max: profiles.default.thresholds.source.u_ref_pu_max
+      rx_ratio_warn_min: profiles.default.thresholds.source.rx_ratio_warn_min
+      rx_ratio_warn_max: profiles.default.thresholds.source.rx_ratio_warn_max
+      z01_ratio_warn_min: profiles.default.thresholds.source.z01_ratio_warn_min
+      z01_ratio_warn_max: profiles.default.thresholds.source.z01_ratio_warn_max
+    recommended_action: Validate with short-circuit and grid-coupling assumptions.
+
+  - id: R-HEU-015
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [output]
+    target: source
+    description: Source short-circuit strength appears weak relative to served load.
+    thresholds:
+      sk_to_total_load_mva_warn_min: profiles.default.thresholds.source.sk_to_total_load_mva_warn_min
+    recommended_action: Recheck source equivalent and connection-level assumptions.
+
+  - id: R-HEU-016
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input, update]
+    target: load_gen
+    description: Apparent power factor is unusually low.
+    thresholds:
+      power_factor_abs_warn_min: profiles.default.thresholds.load_gen.power_factor_abs_warn_min
+    recommended_action: Verify sign conventions and P/Q attribution.
+
+  - id: R-HEU-017
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input, update]
+    target: load_gen
+    description: Q-to-P ratio is unusually high.
+    thresholds:
+      q_to_p_abs_warn_max: profiles.default.thresholds.load_gen.q_to_p_abs_warn_max
+    recommended_action: Recheck reactive model assumptions and compensation devices.
+
+  - id: R-HEU-018
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input, update]
+    target: asym_load_gen
+    description: Per-phase imbalance is unusually high.
+    thresholds:
+      phase_imbalance_ratio_warn: profiles.default.thresholds.load_gen.phase_imbalance_ratio_warn
+    recommended_action: Confirm phase mapping and feeder phase-allocation data.
+
+  - id: R-HEU-019
+    enabled: true
+    check_class: heuristic
+    confidence: low
+    severity: warning
+    stage: [input]
+    target: shunt
+    description: Shunt conductance/susceptance ratio appears atypical.
+    thresholds:
+      g1_to_b1_abs_ratio_warn_max: profiles.default.thresholds.shunt.g1_to_b1_abs_ratio_warn_max
+    recommended_action: Verify whether the element is intended as shunt load or compensator.
+
+  - id: R-HEU-020
+    enabled: true
+    check_class: heuristic
+    confidence: high
+    severity: warning
+    stage: [input]
+    target: sensors
+    description: Sensor sigma is too low and may overweight measurements.
+    thresholds:
+      sigma_abs_min_warn: profiles.default.thresholds.sensor.sigma_abs_min_warn
+    recommended_action: Increase sigma toward realistic metering uncertainty.
+
+  - id: R-HEU-021
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: info
+    stage: [input]
+    target: sensors
+    description: Sensor sigma is too high and contributes little information.
+    thresholds:
+      sigma_abs_max_warn: profiles.default.thresholds.sensor.sigma_abs_max_warn
+    recommended_action: Remove low-value measurements or adjust uncertainties.
+
+  - id: R-HEU-022
+    enabled: true
+    check_class: heuristic
+    confidence: low
+    severity: warning
+    stage: [input]
+    target: sensors
+    description: Measurement density appears low for robust state estimation.
+    thresholds:
+      min_measurement_density_warn: profiles.default.thresholds.sensor.min_measurement_density_warn
+    recommended_action: Add strategically placed measurements for observability robustness.
+
+  - id: R-HEU-023
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: fault
+    description: Fault impedance values are unusually high for practical fault studies.
+    thresholds:
+      r_f_abs_ohm_warn_max: profiles.default.thresholds.fault.r_f_abs_ohm_warn_max
+      x_f_abs_ohm_warn_max: profiles.default.thresholds.fault.x_f_abs_ohm_warn_max
+    recommended_action: Verify intended fault type and study objective.
+
+  - id: R-HEU-024
+    enabled: true
+    check_class: heuristic
+    confidence: low
+    severity: info
+    stage: [update]
+    target: fault
+    description: Many simultaneous faults in one scenario may indicate synthetic or malformed data.
+    thresholds:
+      max_fault_count_per_scenario_warn: profiles.default.thresholds.fault.max_fault_count_per_scenario_warn
+    recommended_action: Confirm scenario semantics and event modeling assumptions.
+
+  - id: R-HEU-025
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: transformer_tap_regulator
+    description: Regulator setpoint or voltage band appears unrealistic.
+    thresholds:
+      regulator_u_set_pu_min: profiles.default.thresholds.voltage.regulator_u_set_pu_min
+      regulator_u_set_pu_max: profiles.default.thresholds.voltage.regulator_u_set_pu_max
+      regulator_u_band_pu_min: profiles.default.thresholds.voltage.regulator_u_band_pu_min
+      regulator_u_band_pu_max: profiles.default.thresholds.voltage.regulator_u_band_pu_max
+    recommended_action: Recalibrate regulator setpoint and deadband.
+
+  - id: R-HEU-026
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [input]
+    target: voltage_regulator
+    description: q_min/q_max window appears unrealistically tight or asymmetric.
+    recommended_action: Validate generator capability-curve assumptions.
+
+  - id: R-HEU-027
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [update]
+    target: status_changes
+    description: Large fraction of status flips in one scenario is unusual.
+    thresholds:
+      max_status_flip_fraction_warn: profiles.default.thresholds.update.max_status_flip_fraction_warn
+    recommended_action: Confirm whether outage/restoration event is intended.
+
+  - id: R-HEU-028
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [update]
+    target: load_gen
+    description: Abrupt total load change between adjacent scenarios.
+    thresholds:
+      max_total_load_change_fraction_warn: profiles.default.thresholds.update.max_total_load_change_fraction_warn
+    recommended_action: Check chronology, scaling, and scenario stitching.
+
+  - id: R-HEU-029
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [update]
+    target: load_gen
+    description: Abrupt total generation change between adjacent scenarios.
+    thresholds:
+      max_total_gen_change_fraction_warn: profiles.default.thresholds.update.max_total_gen_change_fraction_warn
+    recommended_action: Check dispatch assumptions and scenario transitions.
+
+  - id: R-HEU-030
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [update]
+    target: tap_changes
+    description: Large tap movement between neighboring scenarios.
+    thresholds:
+      max_tap_step_jump_warn: profiles.default.thresholds.update.max_tap_step_jump_warn
+    recommended_action: Verify regulator behavior and scenario time granularity.
+
+  - id: R-HEU-031
+    enabled: true
+    check_class: heuristic
+    confidence: low
+    severity: warning
+    stage: [update]
+    target: transformer_tap_regulator
+    description: Regulator setpoint jump between scenarios is unusually large.
+    thresholds:
+      regulator_u_set_step_pu_warn: profiles.default.thresholds.voltage.regulator_u_set_step_pu_warn
+    recommended_action: Check control policy and scenario metadata.
+
+  - id: R-HEU-032
+    enabled: true
+    check_class: heuristic
+    confidence: high
+    severity: warning
+    stage: [output]
+    target: node
+    description: Voltage magnitude outside typical operational range.
+    thresholds:
+      u_pu_low_warn: profiles.default.thresholds.voltage.u_pu_low_warn
+      u_pu_low_error: profiles.default.thresholds.voltage.u_pu_low_error
+      u_pu_high_warn: profiles.default.thresholds.voltage.u_pu_high_warn
+      u_pu_high_error: profiles.default.thresholds.voltage.u_pu_high_error
+    recommended_action: Inspect source strength, tap settings, and reactive support.
+
+  - id: R-HEU-033
+    enabled: true
+    check_class: heuristic
+    confidence: high
+    severity: warning
+    stage: [output]
+    target: branch_and_branch3
+    description: Relative loading above thermal planning limits.
+    thresholds:
+      branch_warn: profiles.default.thresholds.loading.branch_warn
+      branch_severe: profiles.default.thresholds.loading.branch_severe
+    recommended_action: Reconfigure topology, dispatch, or reinforcement assumptions.
+
+  - id: R-HEU-034
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [output]
+    target: energization
+    description: Mass de-energized islands detected.
+    thresholds:
+      max_deenergized_fraction_warn: profiles.default.thresholds.update.max_deenergized_fraction_warn
+      max_islanded_fraction_warn: profiles.default.thresholds.output.max_islanded_fraction_warn
+      min_energized_fraction_warn: profiles.default.thresholds.output.min_energized_fraction_warn
+    recommended_action: Trace source connectivity and switch-state causes.
+
+  - id: R-HEU-035
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [output]
+    target: aggregate_power
+    description: Source-to-total-load ratio is unusually high.
+    thresholds:
+      max_source_to_total_load_ratio_warn: profiles.default.thresholds.output.max_source_to_total_load_ratio_warn
+    recommended_action: Recheck per-unit/base scaling and sign conventions.
+
+  - id: R-HEU-036
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [output]
+    target: aggregate_power
+    description: Net losses are unusually high relative to served load.
+    thresholds:
+      max_net_loss_to_total_load_ratio_warn: profiles.default.thresholds.output.max_net_loss_to_total_load_ratio_warn
+    recommended_action: Inspect impedance assumptions and topology switching anomalies.
+
+  - id: R-HEU-037
+    enabled: true
+    check_class: heuristic
+    confidence: medium
+    severity: warning
+    stage: [output]
+    target: state_estimation_residuals
+    description: Normalized residuals indicate potential model/measurement mismatch.
+    thresholds:
+      max_residual_normalized_warn: profiles.default.thresholds.output.max_residual_normalized_warn
+    recommended_action: Audit sigma settings, sensor health, and topology assumptions.
+
+reporting:
+  required_fields:
+    - id
+    - check_class
+    - confidence
+    - severity
+    - stage
+    - component_type
+    - component_id
+    - message
+    - evidence
+    - recommended_action
+
+  summary_groups:
+    - by_stage
+    - by_component_type
+    - by_confidence

@@ -1,0 +1,216 @@
+{
+  "skill_name": "pgm-assistant",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have network data and want to check loading over time. Find overloaded lines and show results.",
+      "title": "Power-Flow find high loading lines",
+      "expected_output": "A working Python script that loads PGM JSON data, runs batch power flow using PowerGridModel or PowerGridModelInterface, identifies overloaded lines (loading > 80%), and produces a matplotlib plot showing loading over time for the worst offenders. The script should run successfully and produce a plot file.",
+      "files": [
+        "tests/data/generated/pgm_data_20260526T140402Z/synthetic_input_data.json",
+        "tests/data/generated/pgm_data_20260526T140402Z/synthetic_update_data.json"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_enabled": false,
+      "skill_usefulness_score": 7,
+      "title": "Power-Flow Input Validation Report",
+      "prompt": "Validate network data. Check for any issues. Generate a report with findings.",
+      "expected_output": "A markdown file at data/synthetic_pgm_data_20260531T143646Z/validation_report.md listing hard validation failures, likely modeling mistakes, and realism anomalies for the synthetic power-flow fixture. Code or commands used to run the validation should be shown.",
+      "files": ["data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json"],
+      "expectations": [
+        "A markdown report file is created at the requested synthetic-data path or another clearly named output location",
+        "The report references using power-grid-model's validate_input_data or assert_valid_input_data function",
+        "The report identifies the fixture as a synthetic medium-voltage power-flow dataset with about 101 nodes, 100 symmetric loads, and one source",
+        "The report includes at least one engineering or realism finding beyond a simple 'all clear', such as mixed-sign load injections or unusually large individual load magnitudes"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_enabled": false,
+      "skill_usefulness_score": 3,
+      "title": "Batch Power-Flow Results Interpretation",
+      "prompt": "I have batch power flow results. Tell me what happened - voltages, branch loading, losses, and what it means for operations.",
+      "expected_output": "A written explanation covering the synthetic batch power-flow results: voltage profile, branch loading, losses, source/load reactive behavior, and a plain-language operations conclusion.",
+      "files": ["data/synthetic_pgm_data_20260531T143646Z/synthetic_power_flow_output_data.json"],
+      "expectations": [
+        "A written interpretation report is saved to a file in the outputs directory",
+        "The report identifies that the file is a 192-step batch sym_output result rather than a single snapshot",
+        "The report discusses that node voltages are broadly close to nominal in the sampled synthetic feeder instead of claiming collapse-level undervoltage",
+        "The report addresses branch loading and source reactive support using the actual line/source outputs from the synthetic dataset",
+        "The report contains a plain-language or operator-facing conclusion section"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_enabled": false,
+      "skill_usefulness_score": 5,
+      "title": "State-Estimation Sensor Coverage and Quality Diagnosis",
+      "prompt": "Look at the state estimation data. How good is the sensor coverage? What should I check for bad results?",
+      "expected_output": "A diagnosis report that summarizes the sensorized synthetic dataset, evaluates state-estimation readiness from available measurements, and gives a numbered checklist for validating estimation quality without relying on hidden ground truth.",
+      "files": [
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_input_data.json",
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_update_data.json",
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_output_data.json"
+      ],
+      "expectations": [
+        "A diagnosis report file is saved to the outputs directory",
+        "The report separates findings into at least two categories such as sensor/input coverage and estimator result quality",
+        "The report identifies that the synthetic input includes about 101 voltage sensors and 101 power sensors",
+        "The report identifies that measurement noise is intentional and should be assessed against sigma fields, residual trends, or temporal consistency rather than treated as raw data corruption",
+        "The report provides at least one concrete next check such as reviewing the largest residuals, inspecting voltage trajectories, or checking source injections over the 192-step batch"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_enabled": false,
+      "skill_usefulness_score": 9,
+      "title": "Run and Reproduce Batch Power Flow, Cross-Check Against Reference",
+      "prompt": "Run power flow on the network and compare with reference results. Show convergence status, key metrics, and any differences.",
+      "expected_output": "A Python script that loads the data with PGM-IO, runs batch power flow via PowerGridModel.calculate_power_flow(), and outputs a convergence table, per-scenario KPI table, and a numeric cross-check against the reference output file.",
+      "files": [
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json",
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_update_data.json",
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_power_flow_output_data.json"
+      ],
+      "expectations": [
+        "The solution imports and uses power_grid_model (PowerGridModel, CalculationMethod) and power_grid_model_io to load the JSON data",
+        "The solution calls model.calculate_power_flow() with batch update data rather than interpreting the pre-computed file directly",
+        "A convergence status table is produced covering all batch scenarios with a solved/failed flag",
+        "Per-scenario KPIs (min/max u_pu, max branch loading, active losses) are computed from the freshly calculated output arrays",
+        "The maximum absolute deviation of u_pu between the newly calculated and pre-computed reference results is reported numerically"
+      ]
+    },
+    {
+      "id": 6,
+      "eval_enabled": true,
+      "skill_usefulness_score": 10,
+      "title": "Run Batch State Estimation and Benchmark Against Ground Truth",
+      "prompt": "Run state estimation on the network and check how well it matches the true power flow. Show me the worst estimates and a plot of errors over time.",
+      "expected_output": "A Python script that executes batch state estimation via PowerGridModel.calculate_state_estimation(), computes per-step RMSE against the ground-truth file, identifies the worst-estimated nodes, and saves a time-series plot.",
+      "files": [
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_input_data.json",
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_update_data.json",
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_truth_power_flow_output_data.json"
+      ],
+      "expectations": [
+        "The solution calls model.calculate_state_estimation() with CalculationMethod.iterative_linear rather than reading the pre-computed SE output file",
+        "A step-level convergence summary table is produced (solved / non-finite / diverged per scenario)",
+        "Per-step RMSE of u_pu is computed by comparing estimated node voltages against the ground-truth power flow output",
+        "The 5 nodes with the highest mean absolute u_pu error over all 192 steps are identified by node ID",
+        "A time-series plot of mean absolute voltage error per step is saved as a PNG file"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_enabled": true,
+      "skill_usefulness_score": 10,
+      "title": "Short Circuit Calculation with IEC 60909",
+      "prompt": "Calculate short circuit faults on the network. Find the riskiest nodes and which branches would be affected.",
+      "expected_output": "A Python script that calls PowerGridModel.calculate_short_circuit() with IEC 60909 settings, a CSV of all node fault currents ranked by magnitude, branch overload analysis for top-5 fault nodes, and a markdown summary file.",
+      "files": [
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json"
+      ],
+      "expectations": [
+        "The solution imports ShortCircuitVoltageScaling and CalculationMethod from power_grid_model and calls model.calculate_short_circuit() — this cannot be answered without the PGM library",
+        "Fault current magnitudes are extracted from the short circuit output node arrays (i_a, i_b, i_c or the three-phase equivalent)",
+        "All nodes are ranked by fault current and the result is saved to a CSV file",
+        "Branch overload analysis for the top-5 fault nodes is performed using branch output arrays from the same calculation",
+        "A markdown summary file identifying the highest-risk nodes is saved to the outputs directory"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_enabled": true,
+      "skill_usefulness_score": 9,
+      "title": "PGM-DS Topology Analysis — Radial/Meshed Detection and Feeder Depth",
+      "prompt": "Analyze the network topology. Is it radial or meshed? How deep are the branches? Are there any unusual connection points?",
+      "expected_output": "A Python script that builds a PGM-DS Grid, applies its built-in graph algorithms to classify topology, and saves a topology report with connected-component count, radial/meshed classification, max feeder depth, and high-degree node list.",
+      "files": [
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json"
+      ],
+      "expectations": [
+        "The solution constructs a power_grid_model_ds Grid object from the loaded input data",
+        "Connected-component count is derived using PGM-DS graph methods, not external libraries",
+        "A radial vs meshed determination is made using cycle detection available in PGM-DS graph tools",
+        "Maximum feeder depth from the source node is computed and reported as a concrete number",
+        "A markdown topology report is saved to the outputs directory"
+      ]
+    },
+    {
+      "id": 9,
+      "eval_enabled": false,
+      "skill_usefulness_score": 8,
+      "title": "Batch Update Data Validation with assert_valid_batch_data",
+      "prompt": "Check if the batch updates are valid. Any problems with the scenarios? Summary of what gets updated.",
+      "expected_output": "A Python script that calls validate_batch_data or assert_valid_batch_data from power_grid_model.validation, produces scenario-level validation findings, applies realism thresholds from validation-rules.yml, and saves both a JSON and a markdown report.",
+      "files": [
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json",
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_update_data.json"
+      ],
+      "expectations": [
+        "The solution imports and calls validate_batch_data or assert_valid_batch_data from power_grid_model.validation — this is a PGM-specific API that general LLMs cannot replicate",
+        "Scenario-level validation results are reported with specific PGM error codes or messages where failures exist",
+        "The realism check for sym_load p_specified and q_specified uses numeric thresholds from validation-rules.yml, not arbitrary guesses",
+        "A per-component-type update count table is produced from the update data arrays",
+        "Both a JSON and a markdown summary are saved to the outputs directory"
+      ]
+    },
+    {
+      "id": 10,
+      "eval_enabled": false,
+      "skill_usefulness_score": 9,
+      "title": "Newton-Raphson vs Iterative-Current Method Comparison",
+      "prompt": "Try two different calculation methods on the same network. How different are the results? Which one seems better?",
+      "expected_output": "A Python script that runs PowerGridModel.calculate_power_flow() with both CalculationMethod.newton_raphson and CalculationMethod.iterative_current, computes per-node and per-branch differences numerically, and saves a markdown comparison table with a method recommendation.",
+      "files": [
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json"
+      ],
+      "expectations": [
+        "The solution calls model.calculate_power_flow() twice — once per calculation method — so that both result sets are derived by running PGM, not by reading a cached file",
+        "Per-node u_pu deviations between the two methods are computed numerically and the maximum deviation is reported",
+        "The 10 most loaded branches are identified under each method using branch output arrays",
+        "Source active and reactive power outputs are reported for both methods",
+        "A justified method recommendation (e.g. based on network size, convergence behavior, or deviation magnitude) is included in the output markdown"
+      ]
+    },
+    {
+      "id": 11,
+      "eval_enabled": true,
+      "skill_usefulness_score": 10,
+      "title": "N-1 Contingency Screening via Programmatically Constructed Batch Updates",
+      "prompt": "Simulate losing each branch one at a time. Which outages are the most critical? Rank them and show which ones cause problems.",
+      "expected_output": "A Python script that uses initialize_array to build the N-1 batch update data from scratch, runs batch power flow with continue_on_batch_error=True, and saves a contingency ranking CSV and a markdown summary of critical outages.",
+      "files": [
+        "data/synthetic_pgm_data_20260531T143646Z/synthetic_input_data.json"
+      ],
+      "expectations": [
+        "The solution imports and calls initialize_array from power_grid_model to construct the batch update arrays — this is the PGM-specific API that general LLMs will not know; using manually built numpy dtypes or wrong field names will cause a runtime error",
+        "Branch status fields are set using the exact PGM field name 'status' (not 'enabled', 'active', or 'in_service') with value 0 to take each branch out of service",
+        "model.calculate_power_flow() is called with update_data built from initialize_array and with continue_on_batch_error=True so diverged (islanded) scenarios are captured rather than raising an exception",
+        "Voltage violations are counted per scenario by checking node u_pu output arrays against the [0.95, 1.05] band",
+        "A contingency ranking CSV sorted by total violations (voltage violations + branch overloads) is saved to the outputs directory alongside a markdown top-5 summary"
+      ]
+    },
+    {
+      "id": 12,
+      "eval_enabled": false,
+      "skill_usefulness_score": 8,
+      "title": "SE Measurement Residual Analysis and Sensor Flagging",
+      "prompt": "Look at state estimation measurement residuals. Which sensors are off? Do the measurements look calibrated correctly?",
+      "expected_output": "A Python script that executes state estimation via PGM, extracts and normalizes residuals, produces per-sensor statistics with 3-sigma flags, saves histogram plots, and interprets residual distribution calibration quality.",
+      "files": [
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_input_data.json",
+        "data/synthetic_state_estimation_data_20260531T143924Z/synthetic_state_estimation_update_data.json"
+      ],
+      "expectations": [
+        "The solution calls model.calculate_state_estimation() to produce fresh SE outputs rather than reading the pre-computed output file",
+        "Residuals are extracted from the sym_voltage_sensor and sym_power_sensor output arrays (u_residual, p_residual, q_residual fields)",
+        "Each residual is normalized by the corresponding sigma value from the input sensor data",
+        "A per-sensor statistics table (mean, std, max, 3-sigma flag) is produced covering all 192 steps",
+        "Residual histograms for each sensor type are saved as a PNG file and the normality of the distribution is commented on"
+      ]
+    }
+  ]
+}

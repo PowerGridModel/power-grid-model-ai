@@ -1,8 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Contributors to the Power Grid Model project <powergridmodel@lfenergy.org>
-#
 # SPDX-License-Identifier: MPL-2.0
 
-allowRemediationCommits:
-  individual: true
-  thirdParty: true
-
+# ignore the code to generate synthetic data
+tests/data/*.py

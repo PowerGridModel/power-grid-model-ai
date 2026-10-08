@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: 2026 Contributors to the Power Grid Model project <powergridmodel@lfenergy.org>
+#
+# SPDX-License-Identifier: MPL-2.0
+
+name: PGM skill update
+
+# Runs the pgm-skill-update skill once a week using GitHub Copilot CLI.
+# The skill checks for new power-grid-model ecosystem releases and proposes
+# updates to the power-grid-analysis skill references. Any proposed edits are
+# opened as a pull request for human review — nothing is merged automatically.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Every Monday at 06:00 UTC
+  workflow_dispatch: # Allow manual runs from the Actions tab
+
+# Avoid overlapping runs if a previous one is still going.
+concurrency:
+  group: pgm-skill-update
+  cancel-in-progress: false
+
+jobs:
+  update-skill:
+    permissions:
+      contents: write # needed to push branch
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10
+          run_install: |
+            - args: [-g, "@github/copilot"]
+
+      - name: Run pgm-skill-update via Copilot
+        env:
+          # PAT with the "Copilot Requests" permission. Stored as a repo secret:
+          # Settings -> Secrets and variables -> Actions.
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+          # Lets the `gh` CLI authenticate for reading releases/PRs.
+          GH_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+        run: |
+          copilot -p "$(cat <<'PROMPT'
+          You are running unattended in CI. There is NO interactive user, so never
+          wait for input — use sensible defaults and proceed end to end.
+
+          Read and follow the workflow defined in the skill file:
+          .agents/skills/pgm-skill-update/SKILL.md
+
+          Apply these adaptations because this run is non-interactive:
+          - Step 1 (Clarify Scope): DO NOT ask. You are run every week on monday on a cron job.
+            Check the skill.md file for the releases that was last checked. 
+          - Step 10 (Present to User for Approval): DO NOT wait for approval.
+            Instead, directly apply every well-supported suggested edit to the
+            reference files in the working tree. A later step opens a pull request,
+            and that PR review is the approval gate.
+          - Still honor all the "Do not suggest" / "skip" filtering criteria in the
+            skill so only genuinely warranted edits are applied.
+          - Always complete Step 11 (update the Package Version Status line in
+            .agents/skills/power-grid-analysis/SKILL.md) for the packages checked.
+
+          Use the `gh` CLI to read GitHub releases and pull requests, e.g.
+          `gh release list -R PowerGridModel/power-grid-model` and
+          `gh pr view <number> -R <repo>`.
+
+          When finished, write a concise markdown summary of what you found and
+          what you changed (or that no changes were needed) to skill-update-report.md.
+          PROMPT
+          )" \
+            --allow-tool='shell(gh:*)' \
+            --allow-tool='shell(git:*)' \
+            --allow-tool='write' \
+            --no-ask-user
+
+      - name: Ensure report exists and add to job summary
+        if: always()
+        run: |
+          if [ ! -f skill-update-report.md ]; then
+            echo "Copilot run produced no report file." > skill-update-report.md
+          fi
+          cat skill-update-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open pull request with proposed updates
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          # The report is a CI artifact, not part of the repo — don't commit it.
+          add-paths: |
+            .agents/skills/**
+          branch: automated/pgm-skill-update
+          delete-branch: true
+          commit-message: "chore: weekly power-grid-model skill reference update"
+          title: "Weekly PGM skill update"
+          body-path: skill-update-report.md
+          labels: automated, pgm-skill-update

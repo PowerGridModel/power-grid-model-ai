@@ -1,4 +1,5 @@
 <!--
+SPDX-FileCopyrightText: 2026 Contributors to the Power Grid Model project <powergridmodel@lfenergy.org>
 SPDX-FileCopyrightText: Contributors to the Power Grid Model project <powergridmodel@lfenergy.org>
 
 SPDX-License-Identifier: MPL-2.0
@@ -6,31 +7,99 @@ SPDX-License-Identifier: MPL-2.0
 
 [![Power Grid Model logo](https://raw.githubusercontent.com/PowerGridModel/.github/main/artwork/svg/color.svg)](#)
 
-# Power Grid Model template repository
+# Power Grid Model Skills
 
-This is a template repository for the Power Grid Model project.
-Only common and mandatory content is included in this repository.
-The derived repositories should review and edit content relevant to the best practices and standards. 
+A collection of agent skills for working with the [power-grid-model](https://github.com/PowerGridModel/power-grid-model) (PGM) Python ecosystem.
 
-## Checklist after creating a repository from this template
+## Skills
 
-Update the following items manually before publishing your repository:
+### pgm-assistant
 
-- [ ] Rename the repository and update all references in this file.
-- [ ] Replace all `pgm-template-repo` references across the repository, especially in this README and REUSE.toml.
-- [ ] Replace the project title and description in this README.
-- [ ] Ensure all third-party licenses are present in [LICENSES](https://github.com/PowerGridModel/pgm-template-repo/tree/main/LICENSES).
+A **pair-programming** skill that assists grid operators with the full PGM workflow: loading and converting grid data, running power flow and other studies, validating results, and explaining findings — all using the `power-grid-model`, `power-grid-model-ds`, and `power-grid-model-io` libraries.
 
-### Optional checks
+Defined in [.agents/skills/pgm-assistant/SKILL.md](.agents/skills/pgm-assistant/SKILL.md). It covers:
 
-Change these if applicable.
+- **Data ingestion** — deserializing PGM JSON and converting from external formats (Vision, Pandapower, tabular)
+- **Validation** — input data validation and engineering plausibility checks
+- **Calculations** — power flow, state estimation, and short-circuit studies
+- **Result evaluation** — interpreting and explaining calculation outputs
+- **Debugging** — diagnosing failures and inconsistent results
 
-- [ ] Replace Power Grid Model project-specific links (for example contributing, support, release, security, and code of conduct links) 
-with links for your project.
-- [ ] Add logos and badges corresponding to relevant pages
-- [ ] Verify [LICENSE](https://github.com/PowerGridModel/pgm-template-repo/blob/main/LICENSE) copyright holder and year(s).
-Also verify SPDX copyright headers in source and documentation files.
-- [ ] Include documents present in [Home page of PGM org](https://github.com/PowerGridModel/.github/) in documentation if they are created.
+Reference documentation for the skill lives in [.agents/skills/pgm-assistant/references/](.agents/skills/pgm-assistant/references/).
+
+Example prompt to ask the AI with this skill:
+
+```
+“Calculate short circuit faults on the network. Find the riskiest nodes and which branches would be affected. Use the PGM-assistant skill."
+```
+
+See [PROMPT_LIBRARY.md](.agents/skills/pgm-assistant/PROMPT_LIBRARY.md) for a list of other example prompts.
+
+### pgm-issue-analysis
+
+A **dedicated issue-debugging** skill for investigating errors and unexpected results in PGM. Defined in [.agents/skills/pgm-issues/SKILL.md](.agents/skills/pgm-issues/SKILL.md). You can use the skill to an initial investigation into an issue or error you get when working with PGM. This skill is especially usefull when encountering a **SparseMatrixError** or **IterationDiverge Error**. The skill create a **Minimal Reproducible Case** which helps in understanding what the root cause of the problem is.
+It follows a structured five-step investigation workflow:
+
+1. **Reproduce** — run the user's data as-is and confirm the exact error
+2. **Understand the data** — build a structural picture of the network (voltage levels, topology, transformer connections)
+3. **Validate** — run PGM's built-in validation plus cross-component consistency and physical plausibility checks
+4. **Minimal reproducible example** — reduce the dataset to the fewest components that still trigger the failure
+5. **Diagnose** — classify the root cause as a user data bug or a potential PGM bug
+
+The skill produces a `report.ipynb` Jupyter notebook with its findings. Each investigation step is also saved as a numbered Python script (`step1_reproduce.py`, etc.) for full traceability.
+
+Example prompt how to use the skill:
+
+```
+“I am encountering an error when using PGM. Here is the stack trace and dataset. Can you do an investigation to the root cause.”
+```
+
+## Installation
+
+Skills are installed using `npx skills`, a package manager for agent skills. See [skills.sh](https://skills.sh) for more information.
+To install the skills into your coding agent run:
+
+```bash
+# the skills package will ask you which skill you would like to install (pgm-assistant or pgm-issue-analysis)
+npx skills install https://github.com/BrightCubes/power-grid-model-ai
+```
+
+<br><br><br>
+
+## Development
+
+To install requirements run:
+
+```bash
+uv sync
+```
+
+### Installing the skill-creator
+
+The eval loop requires the `skill-creator` skill. How to install it depends on your agent:
+
+**Claude Code** — run `/plugins` and install from the official plugins repository, or install directly with:
+
+```bash
+/plugins install https://github.com/anthropics/claude-plugins-official/blob/main/plugins/skill-creator/skills/skill-creator/SKILL.md
+```
+
+**Other agents** — download the [skill-creator directory](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/skill-creator/skills/skill-creator) and place it in your agent's skills directory (e.g. `.agents/skills/skill-creator`).
+
+### Running skill evaluations
+
+Skill development follows an iterative eval loop managed by the `skill-creator` agent skill. To start, open this repository in an agent that has `skill-creator` available and use a prompt like:
+
+> "Run the evaluations for the pgm-assistant skill at `.agents/skills/pgm-assistant`"
+
+The agent will take it from there:
+
+1. **Run evals** — the agent runs test cases with and without the skill and saves results under `.agents/skills/pgm-assistant-workspace/iteration-N/`.
+2. **Review results** — the agent opens a viewer where you leave feedback on each test case.
+3. **Iterate** — based on your feedback, the agent improves the skill and reruns the evals.
+4. **Optimize triggering** — once the skill content is stable, the agent can optimize the description so the skill triggers reliably.
+
+Test cases are stored in [.agents/skills/pgm-assistant/evals/evals.json](.agents/skills/pgm-assistant/evals/evals.json).
 
 ## License
 
@@ -49,6 +118,13 @@ The concerning license files can be found in the
 
 Please read [CODE_OF_CONDUCT](https://github.com/PowerGridModel/.github/blob/main/CODE_OF_CONDUCT.md) and [CONTRIBUTING](https://github.com/PowerGridModel/.github/blob/main/CONTRIBUTING.md) for details on the process 
 for submitting pull requests to us.
+
+## Historical contributors
+Our gratitude goes to the following contributors who have worked (and are still working) on these services before it became open source:
+
+- Camiel Oerlemans (Bright Cubes)
+- Nitish Bharambe (Alliander)
+- Martijn Govers (Bright Cubes)
 
 ## Citations
 
