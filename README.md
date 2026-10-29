@@ -127,6 +127,19 @@ Our gratitude goes to the following contributors who have worked (and are still 
 - Nitish Bharambe (Alliander; GitHub: [@nitbharambe](https://github.com/nitbharambe))
 - Martijn Govers (Bright Cubes, Alliander; GitHub: [@mgovers](https://github.com/mgovers))
 
+## Guidelines for using the skills safely
+
+Skills are instructions your agent will follow. Treat installing a skill with the same care as installing a dependency:
+
+- **Verify the source.** Install the skills only from this repository's URL and review the skill content (`.agents/skills/`) before use. A modified or spoofed skill can steer your agent in unintended ways (see [OWASP LLM03: Supply Chain](https://genai.owasp.org/llm-top-10/)).
+- **Run generated code in an isolated environment.** The skills direct your agent to write and execute Python against your grid data. Use a project-scoped virtual environment or the sandbox your agent provides, and review generated code before running it outside that environment.
+- **Treat grid data as sensitive.** Real network datasets are critical-infrastructure information. Before providing them to a cloud-hosted agent, check that this complies with your organization's data handling policy (see [OWASP LLM02: Sensitive Information Disclosure](https://genai.owasp.org/llm-top-10/)).
+- **Keep approval checkpoints intact.** The skills include steps where the agent must ask for confirmation before acting. Do not instruct your agent to skip these, and be cautious with agent permission modes that auto-approve actions (see [OWASP LLM06: Excessive Agency](https://genai.owasp.org/llm-top-10/)).
+- **Stay within the allowed library list.** The `pgm-assistant` skill constrains the agent to a fixed set of established libraries and requires your confirmation for anything else. This limits the dependency surface of generated code — treat requests to go outside the list with appropriate scrutiny.
+
+For more information on best practices for working with agentic systems, see the [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) from the [OWASP Gen AI Security Project](https://genai.owasp.org/).
+
+
 ## Citations
 
 If you are using Power Grid Model in your research work, please consider citing our library using the following
