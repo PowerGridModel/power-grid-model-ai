@@ -34,7 +34,6 @@ Use these to map generated PGM integer IDs back to Vision identifiers:
 ## GUID Handling (Vision 9.7+)
 Vision switched to GUID-based identifiers.
 PGM-IO converts GUIDs to integer IDs internally and can keep GUID in `extra_info` when configured in mapping.
-`None` GUID values are explicitly rejected (fixed in PGM-IO v2.0.24).
 
 ## Optional Extra Columns
 Use `optional_extra` in mapping when metadata columns may be absent.

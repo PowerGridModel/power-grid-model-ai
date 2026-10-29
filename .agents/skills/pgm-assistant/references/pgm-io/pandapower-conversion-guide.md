@@ -50,7 +50,7 @@ Current caveats include:
 - `trafo.mag0_percent` (zero-sequence magnetizing impedance) is interpreted as a percentage for pandapower >= 3.4.0 as of PGM-IO v1.3.44; keep pandapower versions aligned when converting zero-sequence transformer parameters.
 
 ## Asymmetric Workflows
-Asymmetric examples are supported with converted input and `calculate_power_flow(symmetric=False)`, then conversion back to pandapower result tables. Output conversion covers all supported elements for asymmetric load flow, and the converter is compatible with pandapower 3.5.4 (PGM-IO v2.0.12).
+Asymmetric examples are supported with converted input and `calculate_power_flow(symmetric=False)`, then conversion back to pandapower result tables.
 
 ## Practical Checklist
 1. Ensure pandapower net has required electrical parameters loaded.

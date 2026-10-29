@@ -60,20 +60,15 @@ Use filter functions in mapping to include/exclude rows per component generation
 This is key for optional component creation from shared source tables.
 
 ## Allowed Functions (PGM-IO v2)
-Support for custom functions in YAML mappings was removed in PGM-IO v2.0.0. Allowed:
-- common non-mutating `pandas.DataFrame` member functions (for example `divide`)
-- functions in `power_grid_model_io.functions`, `power_grid_model_io.functions.filters` (for example `include_only_empty`, allowed in YAML as of v2.0.15) and `power_grid_model_io.functions.phase_to_phase`
+Custom functions in YAML mappings were removed in v2.0.0. Only these can be called:
+- non-mutating `pandas.DataFrame` member functions (for example `divide`)
+- functions in `power_grid_model_io.functions`, `.functions.filters` (for example `include_only_empty`) and `.functions.phase_to_phase`
 
-Migrating a v1 mapping that fails on a custom function:
-1. Replace it with an equivalent pandas call where possible.
-2. Otherwise use a suitable function from `power_grid_model_io.functions`.
-3. Otherwise request it via an issue or PR upstream.
+If a v1 mapping fails on a custom function: replace it with a pandas equivalent, else use a built-in function, else request it upstream.
 
 ## Security Guidance
-- Mapping files are loaded with `yaml.safe_load`.
-- No `eval` usage is allowed.
-- Functions must be loadable by explicit import path (for example `numpy.max`, not alias shorthand) and be on the allowed list above.
-- Treat mapping files as executable configuration with controlled write access.
+- Mapping files are loaded with `yaml.safe_load`; `eval` is not used.
+- Functions are restricted to the allow-list above, so a mapping cannot call arbitrary code.
 
 ## Troubleshooting Checklist
 1. Confirm all required source tables are present.

@@ -99,14 +99,7 @@ out = model.calculate_power_flow(
 )
 ```
 
-Options:
-
-- `default`: the default initialization of the selected method (linear voltage guess for Newton-Raphson).
-- `flat`: every node at 1 p.u. with source reference angle; source and voltage-regulated nodes at their reference voltage.
-- `linear`: linear voltage guess with loads/generators as constant admittances.
-- `average_source`: every node at the average source reference voltage (the start of iterative current).
-
-Use `flat` when the default linear start diverges on meshed (transmission-like) grids. The argument also accepts the member name as a string.
+Use `flat` when the default linear start (the Newton-Raphson default) diverges on meshed, transmission-like grids. Other members: `linear`, `average_source`, `default`. The argument also accepts the member name as a string. Available since v1.13.185.
 
 ## Method Selection Guide
 
