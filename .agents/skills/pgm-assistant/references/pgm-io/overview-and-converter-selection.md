@@ -68,3 +68,8 @@ Set both:
 - Prefer existing converters and their defaults first.
 - Use custom mappings only when source schema differs from defaults.
 - Preserve `extra_info` for result reconciliation.
+
+## Version Notes
+- PGM-IO v2.0.0 dropped Python 3.11 and removed custom functions from tabular/Vision YAML mappings (see `tabular-mapping-reference.md`).
+- `pandas` is restricted to `< 3.0` in the optional dependencies (v2.0.1).
+- CIM/CGMES is not converted by PGM-IO itself; the docs point to external converters (`cgmes2pgm_converter`, and the converter in `Sparlectra.jl`).

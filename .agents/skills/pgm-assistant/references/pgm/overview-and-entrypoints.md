@@ -94,6 +94,23 @@ Use `output_component_types` to reduce compute/memory:
 - `ComponentAttributeFilterOptions.everything`: all components, columnar
 - `{ComponentType.line: [AttributeType.id, AttributeType.p_from], ...}`: per component and attributes
 
+## Logging and CLI
+
+```python
+import logging
+from power_grid_model import Logger, LoggerType
+
+with Logger(LoggerType.info, python_logger=logging.getLogger("pgm")) as logger:
+    model.calculate_power_flow()
+print(logger.output)
+```
+
+- `Logger` is a context manager: it registers for calculations on enter and unregisters on exit.
+- `output` returns the accumulated text; `clear()` empties it.
+- With `python_logger`, each non-empty line is forwarded at `python_logging_level` on exit and the buffer is cleared.
+- `LoggerType.info` is currently the only type.
+- An experimental `power-grid-model` command line interface exists as of v1.13.207 (`power-grid-model --help`).
+
 ## Batch Controls
 
 - `threading=-1`: sequential

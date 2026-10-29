@@ -78,6 +78,7 @@ Action:
 - Discard and recreate model from known-good input after failed updates.
 - Batch results with failed scenarios can include unusable rows for those scenarios.
 - Filter outputs by `succeeded_scenarios`.
+- In Cartesian (multi-dimensional) batches, failed scenarios from all passes are reported as of v1.13.194. Earlier versions only kept the last pass, so failures could go unreported and leave uninitialized rows.
 
 ## Debug Checklist
 

@@ -184,6 +184,7 @@ Line highlights:
 Link highlights:
 
 - High-admittance internal connector model.
+- Without node injection sensors, nodes joined by links are merged (infinite admittance at the macro scale; link power/current flows are recovered afterwards). With node injection sensors, the finite-admittance model is used (backwards compatible on v1).
 - Sensors are intentionally not coupled to `link`.
 
 Transformer highlights:
@@ -227,6 +228,7 @@ Source highlights:
 
 - Thevenin equivalent external network.
 - Key control inputs include `u_ref`, short-circuit strength and impedance ratios.
+- `sk = inf` represents an ideal source (internally capped at a large finite value, 1e50 VA). It is accepted for power flow and state estimation; for short circuit `sk` must be finite and at most 1e50.
 
 Generic load/gen highlights:
 
@@ -285,8 +287,11 @@ Transformer tap regulator highlights:
 Voltage regulator highlights:
 
 - Controls generator/load reactive power to hold node voltage setpoint.
-- Supported for Newton-Raphson power flow.
-- Reactive-limit behavior exists but full limit enforcement reporting is still evolving.
+- Supported for Newton-Raphson power flow only.
+- The regulated node acts as a PV node. If the required reactive power violates `q_min`/`q_max`, the regulated object is clamped to the violated limit and the node switches from PV to PQ.
+- Node output reports the effective `bus_type` (`0` PQ, `1` PV, `2` source/slack).
+- Voltage regulator output reports `limit_violated` (`-1` `q_min` reached, `0` none, `1` `q_max` reached); the actual Q value is on the regulated load/generator output.
+- Multiple active regulators on one node share the required Q equally; a regulator clamped at its limit is removed and the remainder is redistributed.
 
 ## High-Impact Modeling Gotchas
 

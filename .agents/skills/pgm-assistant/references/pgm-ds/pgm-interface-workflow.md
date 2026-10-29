@@ -29,7 +29,9 @@ After `update_grid()`, output fields present in your grid arrays are filled.
 - `PowerGridModelInterface(grid=grid)`
 - `PowerGridModelInterface(input_data=input_data)`
 
-Use `create_grid_from_input_data()` when starting from raw PGM dataset.
+Use `create_grid_from_input_data()` when starting from raw PGM dataset. Columnar `input_data` is supported as of PGM-DS v1.10.3.
+
+Empty component arrays are not passed to PGM as of PGM-DS v1.11.0, so the generated PGM input dict only contains components that have rows.
 
 ## Interface Methods You Will Use Most
 - `create_input_from_grid()`
