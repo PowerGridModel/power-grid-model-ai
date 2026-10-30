@@ -7,78 +7,51 @@ SPDX-License-Identifier: MPL-2.0
 # PGM-DS Mutations, Serialization, and Visualizer
 
 ## Topology Mutation APIs
-Use these instead of manual array edits to keep graph consistency.
+Use these instead of manual array edits so arrays, id tracker and graphs stay consistent.
 
-- `grid.append(array)` — add nodes/branches/other components
-- `grid.delete_node(node)`
-- `grid.delete_branch(branch)`
-- `grid.delete_branch3(branch3)`
-- `grid.make_active(branch)`
-- `grid.make_inactive(branch, at_to_side=True)`
+- `grid.append(array, check_max_id=True)`: adds rows of any component array and updates the graphs. Create rows with `grid.node.empty(n)` / `grid.line.empty(n)` and set columns; rows whose ids are all empty get new ids from `grid.max_id + 1`. Explicit ids that already exist raise `ValueError`; `check_max_id=False` skips that check (follow with `grid.check_ids()`). Append nodes before the branches that use them.
+- `grid.delete_node(nodes)`: also removes the node's branches, appliances, sensors, regulators and faults.
+- `grid.delete_branch(branches)` / `grid.delete_branch3(branch3s)`: also remove sensors and tap regulators attached to them.
+- `grid.make_active(branch)`: sets both statuses to 1. `grid.make_inactive(branch, at_to_side=True)`: sets `to_status` (or `from_status` when `at_to_side=False`) to 0.
 
-> Since PGM-DS v1.9.1, `grid.delete_node(...)` and `grid.delete_branch(...)` accept multi-row arrays, so multiple nodes/branches can be deleted in a single call.
+Argument rules:
+- Pass typed arrays (`grid.line.filter(id=[...])`, `grid.transformer.get(id=3)`), not `grid.branches`, which raises `TypeError`. `grid.get_typed_branches(ids)` returns the typed array for branch ids of one type.
+- The `delete_*` methods accept multi-row arrays; `make_active` / `make_inactive` need exactly one row.
 
-> `Grid.add_node` and `Grid.add_branch` were removed in PGM-DS v1.10.0. Use `grid.append(array)` instead.
+`Grid.add_node`, `Grid.add_branch` and the pickle cache (`Grid.from_cache`, `grid.cache`) no longer exist; use `append` and JSON serialization.
 
 ## Merge Grids
 ```python
 offset = grid.merge(other_grid, mode="recalculate_ids")
 ```
-
-Modes:
-- `keep_ids`: fail on collisions
-- `recalculate_ids`: offset IDs in incoming grid to avoid collisions
-
-Since PGM-DS v1.10.0, `grid.merge` also works on extended grids: custom arrays declaring `_id_columns` have those columns offset during the merge, not just the standard PGM id columns.
+- `recalculate_ids`: adds `grid.max_id` (returned as `offset`) to every id and id-reference column of `other_grid`, including columns declared in a custom array's `_id_columns`.
+- `keep_ids`: returns `None`; raises `ValueError` on id collisions.
+- Both grids must be the same class, otherwise `TypeError`.
 
 ## Grid Serialization
-### Preferred portable format (JSON)
 ```python
-grid.serialize(path_json, mode="json", indent=2)
-loaded = Grid.deserialize(path_json)
-```
+from pathlib import Path
 
-### In-memory JSON string
-```python
+grid.serialize(Path("grid.json"), mode="json", indent=2)  # returns the Path; extra kwargs go to json.dump
+loaded = Grid.deserialize(Path("grid.json"))
+
 json_text = grid.serialize(mode="json_string")
 loaded = Grid.from_json_string(json_text)
 ```
+- `serialize` and `deserialize` require a `Path`; a `str` raises `TypeError` / `AttributeError`.
+- Format: `{"version": "1.0", "type": "grid", "data": {"node": [records...], ...}}`; `NaN` is written as `null`. Files without `version`/`type` still load.
+- `deserialize` takes its target class from the caller: missing columns get defaults, extra columns are dropped with a warning. `ExtGrid.deserialize(path)` therefore loads a plain grid file into an extended grid and the reverse.
+- `Grid.deserialize` also reads a PGM JSON input file (`"type": "input"`, as written by `power_grid_model.utils.json_serialize_to_file`).
 
-> The pickle-based cache (`grid.cache(...)` / `Grid.from_cache(...)`) was removed in PGM-DS v1.10.0. Use JSON `serialize` / `deserialize` for persistence.
+## Visualizer
+Requires `pip install 'power-grid-model-ds[visualizer]'`; importing `power_grid_model_ds.visualizer` without it raises `ImportError`.
 
-> Serialized grids include `version`/`type` metadata (PGM-DS v1.11.0) and write `NaN` as JSON `null` (v1.10.3); older files still load.
-
-## Visualizer Quickstart
 ```python
-from power_grid_model_ds.visualizer import visualize
+from power_grid_model_ds.visualizer import save_html, visualize
 
-visualize(grid)
+visualize(grid, update_data=None, output_data=None, debug=False, port=8050)
+save_html(grid, "grid.html", layout="", include_appliances=False)
 ```
-
-This starts a local dashboard (default localhost).
-
-### Export to standalone HTML
-```python
-from power_grid_model_ds.visualizer import save_html
-
-save_html(grid, "grid.html")
-```
-
-`save_html(grid, path)` writes a self-contained HTML file (Cytoscape.js) without starting the Dash server. Added in PGM-DS v1.10.0.
-
-Optional dependency install:
-```bash
-pip install 'power-grid-model-ds[visualizer]'
-```
-
-## Visualizer Use Cases
-- Quick structural inspection before/after topology mutations
-- Highlight problematic nodes/branches during debugging
-- Compare feeder structures under switching scenarios
-
-## Recommended Mutation Loop
-1. Apply topology changes via grid methods.
-2. Recompute feeder IDs / branch orientation if needed.
-3. Run calculation through interface.
-4. Update grid output fields.
-5. Visualize and inspect.
+- `visualize` starts a blocking Dash server on `localhost:port`. `update_data` / `output_data` are PGM batch datasets whose columns and scenarios become inspectable in the dashboard.
+- `save_html` writes a self-contained Cytoscape.js file without a server. Appliances (loads, generators, sources) are left out unless `include_appliances=True`; it has no `update_data` / `output_data`.
+- Layout: with `x` and `y` columns on `grid.node` the preset layout uses them; otherwise breadthfirst rooted at the sources. `save_html(layout=...)` accepts `"random"`, `"circle"`, `"concentric"`, `"grid"`, `"cose"`, `"breadthfirst"`, `"preset"`.

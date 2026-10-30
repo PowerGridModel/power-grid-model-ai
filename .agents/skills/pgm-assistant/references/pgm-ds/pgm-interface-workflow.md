@@ -6,61 +6,39 @@ SPDX-License-Identifier: MPL-2.0
 
 # PGM-DS to PGM Interface Workflow
 
-## Role of `PowerGridModelInterface`
-`PowerGridModelInterface` connects `Grid` objects to the PGM core calculation engine.
-It handles:
-- Conversion from grid arrays to PGM input data
-- Calculation execution
-- Mapping output values back into grid arrays
+`PowerGridModelInterface(grid=None, input_data=None, system_frequency=50.0)` converts a `Grid` to PGM input data, runs power flow and copies results back. Only columns whose names exist in both the `Grid` array and the PGM dataset are transferred; empty arrays are skipped.
 
 ## Standard Workflow
 ```python
 from power_grid_model_ds import PowerGridModelInterface
 
 core = PowerGridModelInterface(grid=grid)
-core.create_input_from_grid()
-core.calculate_power_flow()
+core.create_input_from_grid()      # returns the PGM input dataset (a dict of structured arrays)
+out = core.calculate_power_flow()  # also stored in core.output_data
 core.update_grid()
 ```
+`calculate_power_flow()` and `update_model()` build the model on first use (`setup_model()`), so `create_input_from_grid()` is optional when you do not need the dataset itself.
 
-After `update_grid()`, output fields present in your grid arrays are filled.
+## Methods
+- `calculate_power_flow(calculation_method=CalculationMethod.newton_raphson, update_data=None, **kwargs)`: `**kwargs` go to `PowerGridModel.calculate_power_flow` (`symmetric`, `error_tolerance`, `max_iterations`, ...). Power flow only; for state estimation or short circuit, pass `create_input_from_grid()` to `PowerGridModel` directly.
+- `update_model(update_data)`: applies an update dataset to the cached model; the change persists for later calculations.
+- `update_grid()`: copies output columns into the matching `Grid` arrays; raises `PGMCoreException` when there is no output. It needs a single-scenario output; batch output raises `ValueError` (shape mismatch).
+- `create_grid_from_input_data(check_ids=True)`: appends the `input_data` passed to the constructor to `interface.grid` (an empty `Grid` unless `grid=` is given) and returns that grid. Missing columns take array defaults; components the `Grid` has no array for are ignored. Columnar input (`{"node": {"id": [...], "u_rated": [...]}}`) is accepted.
+- `core.input_data` is deprecated (emits `DeprecationWarning`).
 
-## Constructor Modes
-- `PowerGridModelInterface(grid=grid)`
-- `PowerGridModelInterface(input_data=input_data)`
-
-Use `create_grid_from_input_data()` when starting from raw PGM dataset. Columnar `input_data` (dict of attribute columns per component) is supported as of PGM-DS v1.10.3. Empty component arrays are not passed to PGM as of v1.11.0.
-
-## Interface Methods You Will Use Most
-- `create_input_from_grid()`
-- `setup_model()`
-- `calculate_power_flow(calculation_method=..., update_data=..., **kwargs)`
-- `update_model(update_data)`
-- `update_grid()`
-- `create_grid_from_input_data(check_ids=True)`
-
-## Calculation with Explicit Method
+## Caching Pitfall
+The input dataset and model are built once and reused. After editing the grid arrays, rebuild both before calculating again:
 ```python
-from power_grid_model import CalculationMethod
-
-out = core.calculate_power_flow(
-    calculation_method=CalculationMethod.newton_raphson,
-)
+core.create_input_from_grid()
+core.setup_model()
 ```
+or create a new `PowerGridModelInterface`. Otherwise `calculate_power_flow()` silently returns results for the old data.
 
-## Batch Update Pattern
-`update_model(update_data=...)` can be used to update model state before additional runs.
-For batch calculations, pass update datasets to `calculate_power_flow(update_data=...)` and propagate selected outputs back with `update_grid()`.
+## Batch Calculations
+```python
+out = core.calculate_power_flow(update_data=batch_update_data)  # does not change the cached model
+```
+Read batch results from `out`; `update_grid()` only handles single-scenario output.
 
-## Practical Pattern for Extended Grids
-1. Extend arrays with output fields you care about.
-2. Build/modify grid.
-3. `create_input_from_grid()`.
-4. Run calculation.
-5. `update_grid()` to fill custom output columns.
-
-## When to Prefer PGM-DS Interface
-Prefer `PowerGridModelInterface` over direct PGM calls when:
-- Grid topology is being actively edited between runs
-- You need graph-aware processing around each run
-- You want output values immediately available on typed grid arrays
+## Output Columns
+Default `Grid` arrays have no output columns. To receive results, use an extended grid (see overview-and-core-objects.md), then call `update_grid()` after the calculation.

@@ -6,65 +6,41 @@ SPDX-License-Identifier: MPL-2.0
 
 # PGM JSON and Data Stores (PGM-IO)
 
-## Which loader for PGM JSON?
-- Files in the standard PGM serialization format (top-level `version`, `type`, `data`, e.g. written by `json_serialize_to_file`): use `power_grid_model.utils.json_deserialize_from_file(Path(...))`. `PgmJsonConverter` raises `PowerGridSerializationError: Array expected ... data/version` on these files.
-- Files in the PGM-IO layout that carry `extra_info`: use `PgmJsonConverter` (below).
-- If unsure, try `json_deserialize_from_file` first, since it needs no extra package.
+## Two JSON Layouts
+| Layout | Shape | Loader / writer |
+|---|---|---|
+| Serialization envelope (e.g. `json_serialize_to_file`, `tests/data/generated/*`) | `{"version": "1.0", "type": "input", "is_batch": false, "attributes": {}, "data": {"node": [...]}}` | `power_grid_model.utils.json_deserialize_from_file(Path(...))` / `json_serialize_to_file` |
+| PGM-IO layout | `{"node": [{"id": 1, "u_rated": 10500, "name": "N0"}], "line": [...]}`; batch: a list of such dicts | `PgmJsonConverter` |
 
-## PgmJsonConverter Quick Workflow
-Use `PgmJsonConverter` for PGM-IO JSON with `extra_info` support.
+- Loading the wrong layout fails: an envelope into `PgmJsonConverter` raises `PowerGridSerializationError: Array expected ... data/version`; a PGM-IO file into `json_deserialize_from_file` raises `Key version not found!`.
+- Envelopes written with `use_compact_list=True` store `data` as lists plus a non-empty `attributes`; the PGM-IO layout is never compact.
+- The PGM-IO file has no type marker: pick `load_input_data`, `load_update_data`, `load_sym_output_data`, ... per file.
+- Extra (non-PGM) attributes of an object go to `extra_info[id]`; this needs an integer `id`. Unknown component names raise `PowerGridSerializationError`. Extra info is not extracted from batch files (`UserWarning`) and is not written for batch data.
 
+### Convert Between Layouts
 ```python
+from pathlib import Path
+from power_grid_model.utils import json_deserialize_from_file, json_serialize_to_file
 from power_grid_model_io.converters import PgmJsonConverter
 
-converter = PgmJsonConverter(
-    source_file="data/input.json",
-    destination_file="data/output.json",
-)
-input_data, extra_info = converter.load_input_data()
-# run PGM
-converter.save(data=output_data, extra_info=extra_info)
+# envelope -> PGM-IO layout (single and batch data)
+data = json_deserialize_from_file(Path("envelope.json"))
+PgmJsonConverter(destination_file="pgm_io.json").save(data)
+
+# PGM-IO layout -> envelope (input data; use load_update_data / load_sym_output_data for other types)
+data, extra_info = PgmJsonConverter(source_file="pgm_io.json").load_input_data()
+json_serialize_to_file(Path("envelope.json"), data)
 ```
+`load_input_data(python_dict)` and `convert(data)` give the PGM-IO layout in memory without files; `convert(data, extra_info=extra_info)` merges `extra_info` back into the objects.
 
-## Why Use This Instead of Raw PGM Utils
-- Compatible with PGM JSON structure
-- Preserves metadata in `extra_info`
-- Easy source/destination management through converter API
+## Data Stores
+Stores live in `power_grid_model_io.data_stores.<module>` (`json_file_store`, `excel_file_store`, `vision_excel_file_store`, `csv_dir_store`). Pass them as `source=` / `destination=` to `TabularConverter`, or as `destination=` to `converter.save(...)`. All take `Path` objects.
+- `JsonFileStore(file_path)`: `.json` only; payload is a dict or a list of dicts. `set_indent(n | None)` (default 2) and `set_compact(bool)` (default `True`, one object per line; only effective when indent is set) control output.
+- `ExcelFileStore(file_path=None, *, language="en", terms_changed=None, **extra_paths)`: `.xls`/`.xlsx`; row 0 holds the column names. Each extra keyword file `name=Path(...)` adds sheets prefixed `name.<sheet>`. Duplicate column names get a `_2`, `_3`, ... suffix with a logged warning.
+- `VisionExcelFileStore(file_path, language="en", terms_changed=None)`: also reads row 1 as the unit row, so columns become `(name, unit)` tuples.
+- `CsvDirStore(dir_path, **pandas_read_csv_kwargs)`: every `*.csv` in the directory is a table named after the file stem.
 
-## Data Stores You Will Encounter
-- `JsonFileStore`: structured JSON load/save with formatting control
-- `ExcelFileStore`: tabular Excel read/write
-- `VisionExcelFileStore`: Vision-specific Excel handling (unit row handling)
-
-## JsonFileStore Notes
-- Supports indent and compact output settings.
-- Expects structured dictionary/list payload forms.
-
-## TabularData Wrapper
-`TabularData` is used in tabular converter flows and supports:
-- `set_unit_multipliers(...)`
-- `set_substitutions(...)`
-- `get_column(table_name, column_name)` with automatic unit/substitution application
-
-## Mapping Helper Types
-- `FieldMapping`
-- `MultiplierMapping`
-- `TabularMapping`
-- `UnitMapping`
-- `ValueMapping`
-
-These are useful when building custom conversion logic or debugging mapping behavior.
-
-## Utility Functions Worth Knowing
-- `AutoID` for stable external-to-internal ID mapping
-- `merge_dicts(...)`
-- download helpers for fetching and extracting datasets
-- JSON helpers (`JsonEncoder`, compact dumping)
-- module loader helper (`get_function`) for mapping functions
-
-## Practical Interchange Pattern
-1. Load source data via converter/store.
-2. Preserve `extra_info`.
-3. Run PGM.
-4. Save/convert output to target format.
-5. Keep output + metadata together for reproducibility and traceability.
+## TabularData
+`from power_grid_model_io.data_types import TabularData`; `TabularData(**{table_name: DataFrame | structured ndarray | callable returning a DataFrame})`. Stores return it with lazily loaded sheets; use it as a context manager (or call `close()`) to release Excel readers.
+- `get_column(table_name, column_name)` applies unit conversion and value substitution (rules in [tabular-mapping-reference.md](tabular-mapping-reference.md)); `"index"` returns the DataFrame index.
+- `set_unit_multipliers(UnitMapping)` and `set_substitutions(ValueMapping)` are set by the converter from the mapping file.
