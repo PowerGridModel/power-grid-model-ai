@@ -6,68 +6,54 @@ SPDX-License-Identifier: MPL-2.0
 
 # PGM-DS Overview and Core Objects
 
-## Purpose of PGM-DS
-`power-grid-model-ds` provides an application-facing grid model on top of PGM.
-Use it when you need:
-- Safer grid mutations
-- Graph-aware analysis
-- Easier array handling with typed abstractions
-- Tight integration with PGM calculations
+`power-grid-model-ds` wraps PGM with typed arrays (`FancyArray`), a `Grid` container that keeps arrays, ids and graphs consistent, and `PowerGridModelInterface` to run PGM calculations on a `Grid`.
 
-## Core Types
-- `Grid`: full network object with arrays and graph container
-- `FancyArray`: typed structured-array wrapper
-- `GraphContainer`: maintains active and complete graph views
-- `PowerGridModelInterface`: bridge between `Grid` and `PowerGridModel`
+Public imports: `from power_grid_model_ds import Grid, FancyArray, GraphContainer, PowerGridModelInterface`; plus `power_grid_model_ds.arrays` (`NodeArray`, `LineArray`, ...), `.enums` (`NodeType`), `.generators` (`RadialGridGenerator`), `.errors` (`MissingNodeError`, `NoPathBetweenNodes`, `RecordDoesNotExist`, `MultipleRecordsReturned`, `PGMCoreException`).
 
 ## Building a Grid
 ```python
-from power_grid_model_ds import Grid
-
 grid = Grid.empty()
+grid = Grid.from_txt("S1 2 11", "2 3 12,open", "3 4 13,transformer")  # also Grid.from_txt_file(path)
+grid = Grid.deserialize(path)  # JSON, see mutations-serialization-visualizer.md
+grid = RadialGridGenerator(grid_class=Grid, nr_nodes=20, nr_sources=1, nr_nops=2).run(seed=1)
 ```
+- `from_txt` line format: `<from> <to> [comma-separated tags]`. A node written `S<id>` becomes a substation node (`node_type == NodeType.SUBSTATION_NODE`); other tags: an integer branch id, `open` (sets `to_status=0`), `transformer`, `link`, `generic_branch`, `asym_line`. Without a type tag the branch is a line. An id must not appear both as `S1` and `1`. `from_txt` also calls `set_feeder_ids()`; `str(grid)` writes the same format.
+- `RadialGridGenerator` output has substation nodes and sources; a grid built from raw PGM input has `node_type == 0` everywhere (see substation-dependent functions in graph-and-topology-recipes.md).
 
-Other constructors:
-- `Grid.from_txt(...)` and `Grid.from_txt_file(...)`
-- `Grid.deserialize(path)` and `Grid.from_json_string(...)`
-- `RadialGridGenerator(...).run(seed=...)`
+## FancyArray
+- Selection: `filter(*ids, mode_="AND"|"OR", **column_values)` and `exclude(...)` return copies; `get(...)` returns exactly one record and raises `RecordDoesNotExist` / `MultipleRecordsReturned` otherwise. `*_mask` variants return boolean masks. Pass these copies, not slices such as `grid.line[:3]`, to grid methods (see `reverse_branches` in graph-and-topology-recipes.md).
+- `update_by_id(ids, allow_missing=False, **column_values)` updates in place; `as_df()` needs pandas.
+- `zeros(n)` builds zero-filled rows; `empty(n)` fills every column with its empty marker (`NaN` floats, `-2147483648` ints) and applies `_defaults`. Both leave `id` empty; `grid.append` then assigns new ids.
+- Custom arrays subclass an existing array and declare columns as `NDArray[...]` annotations. Class attributes: `_defaults` (fill values), `_id_columns` (columns that `grid.merge` must offset), `_str_lengths`. Prefer `IntEnum` columns over strings.
 
-## FancyArray Essentials
-Common capabilities:
-- `zeros(num)` and `empty(num)`
-- `filter(...)`, `exclude(...)`, `get(...)`
-- `update_by_id(...)`
-- `as_df()`
-- `check_ids()`
+## Grid
+Component arrays: `node`, `line`, `link`, `transformer`, `three_winding_transformer`, `generic_branch`, `asym_line`, `source`, `sym_load`, `sym_gen`, `asym_load`, `asym_gen`, `shunt` (`g1`/`b1`, no `u_ref`), `voltage_regulator`, `transformer_tap_regulator`, `{sym,asym}_{power,voltage,current}_sensor`, `fault`. Plus `graphs` (a `GraphContainer`).
 
-Design notes:
-- Define custom arrays by subclassing `FancyArray`.
-- Use `_defaults` for fill values.
-- Prefer enums over string fields when possible for memory efficiency.
+- Arrays hold input attributes only, plus `feeder_branch_id`/`feeder_node_id` (nodes and branches) and `is_feeder` (branches). Calculation output columns do not exist until you add them (below).
+- `grid.branches` concatenates all branch arrays into one `BranchArray`; `grid.branch_arrays` lists them. `grid.rebuild_ids()` / `grid.check_ids()` / `grid.rebuild_graphs()` resync the id tracker and graphs after direct array edits. `grid.diff(other)` prints differences.
+- Ids are unique across all arrays of a grid.
 
-## Grid Container Behaviors
-`Grid` tracks:
-- Typed component arrays (`node`, `line`, `transformer`, sensors, etc.)
-- `graphs` with active and complete topology views
-- ID integrity across arrays
+## Extending a Grid with Output Columns
+```python
+import numpy as np
+from dataclasses import dataclass
+from numpy.typing import NDArray
+from power_grid_model_ds import Grid
+from power_grid_model_ds.arrays import NodeArray, LineArray
 
-Available component arrays on `Grid` include: `node`, `line`, `link`, `transformer`, `three_winding_transformer`, `generic_branch`, `asym_line`, `source`, `sym_load`, `sym_gen`, `asym_load`, `asym_gen`, `shunt`, `voltage_regulator`, `transformer_tap_regulator`, the `sym_`/`asym_` `power`/`voltage`/`current` sensors, and `fault`. (`asym_load`, `asym_gen`, `shunt`, `voltage_regulator`, `fault`, and the asym power sensor array were added in PGM-DS v1.8.0; `shunt` uses `g1`/`b1` and has no `u_ref`.)
+class ExtNodeArray(NodeArray):
+    _defaults = {"u_pu": np.nan, "u": np.nan}
+    u_pu: NDArray[np.float64]
+    u: NDArray[np.float64]
 
-Useful properties/methods:
-- `branch_arrays`, `branches`
-- `append(array)`
-- `rebuild_ids()`, `check_ids()`
-- `rebuild_graphs()`
-- `diff(other_grid)` for debugging
+class ExtLineArray(LineArray):
+    _defaults = {"loading": np.nan}
+    loading: NDArray[np.float64]
 
-## Extending Grid with Custom Output Columns
-PGM-DS supports extending arrays so output fields can be pushed back from calculation results.
-
-Pattern:
-1. Extend `NodeArray` / `LineArray` with extra columns.
-2. Extend `Grid` dataclass using those array types.
-3. Use `PowerGridModelInterface.update_grid()` after calculations.
-
-## Safety Notes
-- The pickle-based cache (`Grid.from_cache` / `grid.cache`) was removed in PGM-DS v1.10.0.
-- Use JSON `serialize` / `deserialize` for portable, safe interchange.
+@dataclass
+class ExtGrid(Grid):
+    node: ExtNodeArray
+    line: ExtLineArray
+```
+- Every added column needs a `_defaults` entry; without it, building the grid from PGM input data raises `Missing required columns`.
+- `PowerGridModelInterface.update_grid()` copies output columns whose names match (see pgm-interface-workflow.md). `Grid.from_extended(ext_grid)` converts back to a plain `Grid`.
