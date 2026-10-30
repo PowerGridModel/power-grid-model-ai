@@ -44,6 +44,7 @@ Use these before expensive calculations.
 ### Input-only validation
 
 ```python
+from power_grid_model import CalculationType  # not in power_grid_model.validation
 from power_grid_model.validation import validate_input_data, assert_valid_input_data
 
 errors = validate_input_data(input_data, calculation_type=CalculationType.power_flow, symmetric=True)
@@ -89,7 +90,7 @@ print(message)
 
 - `json_deserialize(...)`
 - `json_serialize(...)`
-- `json_deserialize_from_file(path)`
+- `json_deserialize_from_file(path)` (takes a `pathlib.Path`, not a `str`)
 - `json_serialize_to_file(path, data, dataset_type=...)`
 
 ### Msgpack

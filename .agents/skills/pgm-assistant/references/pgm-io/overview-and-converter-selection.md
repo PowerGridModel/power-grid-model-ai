@@ -11,8 +11,9 @@ SPDX-License-Identifier: MPL-2.0
 It also preserves non-PGM metadata in `extra_info` for traceability.
 
 ## Converter Selection
+- Plain PGM JSON (`version`/`type`/`data` envelope): no converter needed; use `power_grid_model.utils.json_deserialize_from_file(Path(...))`.
 - `PgmJsonConverter`:
-  - Use when source/target is native PGM JSON.
+  - Use for PGM-IO JSON layout, mainly when `extra_info` must be preserved.
 - `VisionExcelConverter`:
   - Use for Vision Excel exports.
   - Built on tabular converter infrastructure.

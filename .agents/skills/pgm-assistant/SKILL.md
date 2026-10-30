@@ -4,115 +4,50 @@
 # SPDX-License-Identifier: MPL-2.0
 
 name: pgm-assistant
-description: "Use when: working on any power-grid-model ecosystem task, including app building, data conversion, validation, grid calculations, result explanation, and debugging. This skill covers the full range of operations across the `power-grid-model` ecosystem, including core calculations (PGM), graph/topology operations and visualizer workflows (PGM-DS), and data format conversions (PGM-IO)."
+description: "Assistant for the power-grid-model ecosystem: power-grid-model (PGM), power-grid-model-ds (PGM-DS) and power-grid-model-io (PGM-IO). Use for running power flow, state estimation or short circuit calculations (single, batch/time-series, N-1); validating PGM input/update data; converting Vision, pandapower or tabular network data to PGM; grid/graph/topology/feeder analysis with PGM-DS; building PGM-based scripts, notebooks or pipelines; explaining or plotting results (loading, voltages, losses, sensor quality); and debugging PGM errors such as IterationDiverge, SparseMatrixError, NotObservableError, IDNotFound or ConflictVoltage. Use it even when the user only mentions 'network data', 'grid', 'feeder', 'overloaded lines', 'sensors' or an input_data.json and never names a package. For suspected bugs in PGM itself, use pgm-issue-analysis instead."
 ---
 
-# Power Grid Model Ecosystem Operations
+# Power Grid Model Ecosystem Assistant
 
 ## Package Version Status
 Last reviewed: PGM v1.13.217 · PGM-DS v1.11.0 · PGM-IO v2.0.36 (checked 2026-10-30)
 
-This skill is for operations across the full `power-grid-model` ecosystem. The repositories are tools; the user request defines the task.
+## Layers
+- **PGM** (`power-grid-model`): calculations (power flow, state estimation, short circuit) and data validation.
+- **PGM-DS** (`power-grid-model-ds`): `Grid` objects, graph/topology analysis, mutations, visualizer, bridge to PGM.
+- **PGM-IO** (`power-grid-model-io`): converters from Vision, pandapower, tabular/Excel and native PGM JSON.
 
-Prompt starters are available in `PROMPT_LIBRARY.md`.
+## Find the right reference
+Read only the files the task needs (usually one to three). Paths are relative to `references/`. When a task spans several rows, work in the order conversion → validation → calculation → explanation/debugging.
 
-## Ecosystem Tool Roles
-- `power-grid-model` (PGM): core calculations and validation APIs.
-- `power-grid-model-ds` (PGM-DS): application-layer grid objects, graph/topology operations, mutations, and visualizer workflows.
-- `power-grid-model-io` (PGM-IO): conversion between external formats and PGM-compatible datasets.
-
-## Dependency Rules
-
-| Constraint Category | Rule Details |
+| Task | Read |
 | --- | --- |
-| **Reference Documents** | Start with `references/README.md`, then route to task guides in `references/tasks` and layer guides in `references/pgm`, `references/pgm-ds`, `references/pgm-io`. `REFERENCES.md` is kept as a backward-compatible landing page. |
-| **Allowed Libraries** | You are strictly constrained to `power-grid-model` (PGM), `power-grid-model-ds` (PGM-DS), `power-grid-model-io` (PGM-IO), `numpy`, `pandas`, `matplotlib`, and `seaborn`. |
-| **Preference** | Prefer `numpy` over `pandas` where straightforward. |
-| **Graph & Visualization** | Strictly utilize any graph and network consistency logic from `power-grid-model-ds` (which exposes a `Grid` dataclass, graph algorithms, and grid visualizer tools). Do not use outside graph dependencies like networkx directly. |
-| **Less Popular Libraries** | If you need any library outside the permitted list, ask the user for confirmation first. |
-| **Ask Questions** | When requirements are unclear at any step, pause and ask the user for clarification. |
+| Load or convert data (plain PGM JSON needs no converter) | `pgm-io/pgm-json-and-data-stores.md` (PGM JSON); for Vision, pandapower or tabular: `pgm-io/overview-and-converter-selection.md`, then `pgm-io/vision-conversion-guide.md`, `pgm-io/pandapower-conversion-guide.md` or `pgm-io/tabular-mapping-reference.md` |
+| Check a conversion | `tasks/conversion-validation.md` |
+| Validate input/update data, realism checks | `tasks/data-validation.md`, `tasks/engineering-plausibility-and-realism.md` (thresholds in `tasks/validation-rules.yml`), `pgm/batch-validation-serialization.md` |
+| Run power flow / state estimation / short circuit, batch runs | `pgm/overview-and-entrypoints.md`, `pgm/calculation-recipes.md` |
+| Component and attribute meaning, dtypes, dataset layout | `pgm/data-model-components-and-datasets.md` |
+| Topology, radial/meshed, feeders, paths, mutations, visualizer | `pgm-ds/graph-and-topology-recipes.md`, `pgm-ds/overview-and-core-objects.md`, `pgm-ds/mutations-serialization-visualizer.md` |
+| Run calculations from a PGM-DS `Grid` | `pgm-ds/pgm-interface-workflow.md` |
+| Explain, summarise or plot results | `tasks/result-evaluation-and-explanation.md`, `tasks/engineering-plausibility-and-realism.md` |
+| Debug errors or odd results | `pgm/errors-and-debugging.md`, `pgm-ds/graph-and-topology-recipes.md` |
+| Build or extend an application/pipeline | `tasks/application-build-and-automation.md` |
 
-## Python Script Standards
-If the user provided other python standards always use these. Otherwise, use the following rules:
-When delivering code as a Python script (`.py`):
-- Organise all logic into well-named functions (e.g. `load_data()`, `run_power_flow()`, `plot_results()`).
-- Include a `main()` function that calls them in order and contains no business logic itself.
-- End every script with `if __name__ == "__main__": main()`.
+## Working rules
+- **Libraries.** Use PGM, PGM-DS, PGM-IO, `numpy`, `pandas`, `matplotlib`, `seaborn`; prefer `numpy` over `pandas` where straightforward. Libraries needed to read the user's source format (for example `pandapower` when converting a pandapower net) are fine. Ask before adding anything else, because the user's environment may not have it.
+- **Graphs.** Use PGM-DS graph tools (`Grid`, graph container). Do not import `networkx` or other graph libraries directly, so topology logic stays consistent with the grid model.
+- **Validate before calculating.** Run the PGM validation functions on input and update data first. Malformed data otherwise surfaces later as opaque calculation errors.
+- **Run what you write.** Execute the code and check convergence, batch errors (`continue_on_batch_error`, `batch_error`) and result shapes before reporting. State assumptions such as method, symmetric vs asymmetric, loading limits and sensor sigmas.
+- **Ask when it matters.** Ask when a missing detail would change the result (limits, calculation type, start datetime for time series, an unlisted library). Otherwise pick a sensible default and state it.
+- **Output format.** For a new code deliverable where the user has not said, ask once: Python script (`.py`) or Jupyter notebook (`.ipynb`)? Do not ask for explanation, debugging or analysis-only requests, or when the user or the existing project already shows a preference. If nobody can answer, default to `.py`.
 
-## Plot Standards
-When producing time-series plots:
-- Always show real dates and times on the x-axis, not bare hours-from-zero.
-- Build a `pd.DatetimeIndex` or `np.datetime64` array for the x-axis. If the start datetime cannot be derived from the data, ask the user before proceeding.
-- Use `matplotlib.dates` (`AutoDateLocator`, `AutoDateFormatter`, or `mdates.DateFormatter`) so tick labels display as human-readable date/time strings (e.g. `2026-05-26 00:00`).
+## Deliverable standards
+**Scripts (`.py`)**, unless the user gave their own standards:
+- Put logic in well-named functions (`load_data()`, `run_power_flow()`, `plot_results()`).
+- `main()` only calls them in order; end with `if __name__ == "__main__": main()`.
 
-Use the following task-first workflow.
+**Notebooks (`.ipynb`)**: logical cells, each section introduced by a markdown heading.
 
-## Step 0: Clarify Output Format
-Before writing any code, ask the user:
+**Time-series plots**: show real dates/times on the x-axis, never bare hours-from-zero. Build a `pd.DatetimeIndex` or `np.datetime64` array (ask for the start datetime if the data does not provide it) and format ticks with `matplotlib.dates` (e.g. `2026-05-26 00:00`).
 
-> "Should I write this as a Python script (`.py`) or a Jupyter notebook (`.ipynb`)?"
-
-Wait for the answer and apply the appropriate standard (see **Python Script Standards** above for `.py`; use logical cell structure with markdown headings for `.ipynb`).
-
-## Step 1: Classify the Task
-Classify the user request into one or more of the following tasks:
-- Build or extend an application/workflow on top of PGM.
-- Convert/bridge datasets between formats or tools.
-- Validate input/update data before calculations.
-- Run studies (power flow, state estimation, short circuit).
-- Evaluate and explain calculation outputs.
-- Debug failures or inconsistent results.
-
-If the request is ambiguous, ask clarifying questions first.
-
-## Step 2: Deserialize and Normalize Data
-Ensure the input/update data is in a PGM-compatible form.
-- If data is in PGM JSON format, use `power-grid-model-io` converter flows.
-- If data is external (Vision, Pandapower, tabular), convert with the correct PGM-IO converter.
-- If deserialization or conversion fails, provide precise errors and corrective actions.
-
-Primary references:
-- `references/pgm-io/overview-and-converter-selection.md`
-- `references/pgm-io/pgm-json-and-data-stores.md`
-
-## Step 3: Execute the Task Playbook
-Route to the relevant reference set:
-
-- **Application build/extension**:
-	- `references/tasks/application-build-and-automation.md`
-	- `references/pgm-ds/pgm-interface-workflow.md`
-- **Data validation**:
-	- `references/tasks/conversion-validation.md`
-	- `references/tasks/data-validation.md`
-	- `references/tasks/engineering-plausibility-and-realism.md`
-	- `references/tasks/validation-rules.yml`
-	- `references/pgm/batch-validation-serialization.md`
-- **Calculation run patterns**:
-	- `references/pgm/calculation-recipes.md`
-	- `references/pgm/overview-and-entrypoints.md`
-- **Result evaluation and explanation**:
-	- `references/tasks/result-evaluation-and-explanation.md`
-	- `references/tasks/engineering-plausibility-and-realism.md`
-- **Debugging/troubleshooting**:
-	- `references/pgm/errors-and-debugging.md`
-	- `references/pgm-ds/graph-and-topology-recipes.md`
-
-When tasks overlap, prioritize references in the order of conversion, validation, calculation, and then debugging.
-
-## Step 4: Return Outputs for the Active Task
-Always return task-appropriate outputs:
-- Code/script changes for implementation tasks.
-- Validation findings and rejected records for validation tasks.
-- Calculated datasets and method assumptions for study tasks.
-- Clear diagnostics and fix options for debugging tasks.
-- Summaries/charts and interpretation for result-explanation tasks.
-
-## Completion Criteria
-- [ ] Output format (`.py` or `.ipynb`) was confirmed with the user before writing code.
-- [ ] The user request was classified into the correct PGM task(s).
-- [ ] Data was deserialized/converted and validated where required.
-- [ ] Appropriate ecosystem layers (PGM/PGM-DS/PGM-IO) were used for the task.
-- [ ] Deliverables were provided in a task-appropriate form (code, diagnostics, or explanation).
-- [ ] Python scripts use functions and a `main()` entry point (if output format is `.py`).
-- [ ] Time-series plots show real dates/times on the x-axis (if plots were produced).
-- [ ] Verified that no unauthorized external dependencies were used.
+**By task type**: code for implementation; findings and rejected records for validation; datasets plus method assumptions for studies; diagnosis plus fix options for debugging; summary, charts and interpretation for result explanation.

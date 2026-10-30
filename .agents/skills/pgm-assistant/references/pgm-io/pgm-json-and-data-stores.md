@@ -6,8 +6,13 @@ SPDX-License-Identifier: MPL-2.0
 
 # PGM JSON and Data Stores (PGM-IO)
 
+## Which loader for PGM JSON?
+- Files in the standard PGM serialization format (top-level `version`, `type`, `data`, e.g. written by `json_serialize_to_file`): use `power_grid_model.utils.json_deserialize_from_file(Path(...))`. `PgmJsonConverter` raises `PowerGridSerializationError: Array expected ... data/version` on these files.
+- Files in the PGM-IO layout that carry `extra_info`: use `PgmJsonConverter` (below).
+- If unsure, try `json_deserialize_from_file` first, since it needs no extra package.
+
 ## PgmJsonConverter Quick Workflow
-Use `PgmJsonConverter` for native PGM JSON with `extra_info` support.
+Use `PgmJsonConverter` for PGM-IO JSON with `extra_info` support.
 
 ```python
 from power_grid_model_io.converters import PgmJsonConverter

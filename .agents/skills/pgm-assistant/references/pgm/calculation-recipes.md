@@ -61,14 +61,39 @@ Switch to `CalculationMethod.newton_raphson` when measurement weighting and nonl
 
 ## Recipe 5: Short Circuit
 
+Short circuit needs `fault` components in `input_data`, and every `source` needs a finite `sk` (and `rx_ratio`). Without them PGM uses defaults (`sk = 1e10` VA), which gives unrealistically large currents, so take `sk` from the user or state the assumed value.
+
 ```python
-from power_grid_model import CalculationMethod, ShortCircuitVoltageScaling
+from power_grid_model import (
+    CalculationMethod, ComponentType, DatasetType, FaultPhase, FaultType,
+    PowerGridModel, ShortCircuitVoltageScaling, initialize_array,
+)
+
+# One inactive fault per node, activated one scenario at a time (batch over nodes)
+n = len(node_ids)
+fault = initialize_array(DatasetType.input, ComponentType.fault, n)
+fault["id"] = fault_ids  # must not clash with existing ids
+fault["status"] = 0
+fault["fault_type"] = FaultType.three_phase
+fault["fault_phase"] = FaultPhase.abc
+fault["fault_object"] = node_ids
+model = PowerGridModel({**input_data, ComponentType.fault: fault})
+
+update = initialize_array(DatasetType.update, ComponentType.fault, (n, n))
+update["id"] = fault["id"]
+update["status"] = np.eye(n, dtype=int)
 
 out = model.calculate_short_circuit(
+    update_data={ComponentType.fault: update},
     calculation_method=CalculationMethod.iec60909,
-    short_circuit_voltage_scaling=ShortCircuitVoltageScaling.maximum,
+    short_circuit_voltage_scaling=ShortCircuitVoltageScaling.maximum,  # .minimum for the c_min case
 )
 ```
+
+Output notes:
+- Short-circuit results are always per phase: `node["u_pu"]` is `(n_scenarios, n_nodes, 3)`, `line["i_from"]` is `(n_scenarios, n_lines, 3)`, `fault["i_f"]` is `(n_scenarios, n_faults, 3)`. Use the active fault's entry (the diagonal of the scenario/fault axes) and phase 0 for a three-phase fault.
+- Non-three-phase faults need zero-sequence line data (`r0`, `x0`); without it the calculation fails with `SparseMatrixError`. Ask for or state the zero-sequence assumption.
+- In a radial grid only branches on the path from source to fault carry fault current.
 
 ## Recipe 6: Regulated Power Flow with Tap Strategy
 

@@ -38,7 +38,8 @@ with grid.graphs.active_graph.tmp_remove_nodes([1, 2, 3]):
 
 ### Temporarily remove branches for what-if analysis
 ```python
-with grid.graphs.active_graph.tmp_remove_branches([branch_id_1, branch_id_2]):
+# Branches are (from_node, to_node) pairs, not branch ids
+with grid.graphs.active_graph.tmp_remove_branches([(from_node_1, to_node_1), (from_node_2, to_node_2)]):
     components = grid.graphs.active_graph.get_components()
 ```
 If an exception occurs inside the block the graph is automatically restored to its original state. Added in PGM-DS v1.10.1.
