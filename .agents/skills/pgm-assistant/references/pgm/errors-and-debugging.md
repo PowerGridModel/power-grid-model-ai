@@ -88,6 +88,20 @@ Action:
 5. Inspect IDs and component references for update datasets.
 6. Recreate model if any update failed mid-run.
 
+## Calculation Logger (Opt-in Diagnostics)
+
+```python
+from power_grid_model import Logger, LoggerType
+
+with Logger(LoggerType.info) as logger:
+    model.calculate_power_flow()
+    print(logger.output)
+```
+
+- `LoggerType.info`: timestamped text messages. `LoggerType.benchmark`: timing per calculation phase.
+- Output is non-conclusive debugging hints, not a stable format; do not parse it.
+- Optional `python_logger=` forwards lines to a Python `logging.Logger` on exit, and then clears the buffer, so read `output` before exit if you need it.
+
 ## Minimal Batch Error Pattern
 
 ```python

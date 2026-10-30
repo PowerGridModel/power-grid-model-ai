@@ -68,3 +68,6 @@ Set both:
 - Prefer existing converters and their defaults first.
 - Use custom mappings only when source schema differs from defaults.
 - Preserve `extra_info` for result reconciliation.
+
+## CIM/CGMES
+PGM-IO has no CIM/CGMES converter. Upstream docs point to external ones: `cgmes2pgm_converter` and the converter in `Sparlectra.jl`.

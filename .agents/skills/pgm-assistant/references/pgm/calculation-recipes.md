@@ -88,6 +88,19 @@ Strategy options include:
 - `max_voltage_tap`
 - `fast_any_tap`
 
+## Recipe 7: Newton-Raphson Initialization (Flat Start)
+
+```python
+from power_grid_model import CalculationInitialization, CalculationMethod
+
+out = model.calculate_power_flow(
+    calculation_method=CalculationMethod.newton_raphson,
+    calculation_initialization=CalculationInitialization.flat,
+)
+```
+
+Use `flat` when the default linear start (the Newton-Raphson default) diverges on meshed, transmission-like grids. Other members: `linear`, `average_source`, `default`. The argument also accepts the member name as a string. Available since v1.13.185.
+
 ## Method Selection Guide
 
 - Start with Newton-Raphson for power flow unless you have a clear speed reason.
