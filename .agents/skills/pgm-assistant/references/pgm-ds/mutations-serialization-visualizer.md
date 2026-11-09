@@ -46,6 +46,8 @@ loaded = Grid.from_json_string(json_text)
 
 > The pickle-based cache (`grid.cache(...)` / `Grid.from_cache(...)`) was removed in PGM-DS v1.10.0. Use JSON `serialize` / `deserialize` for persistence.
 
+> Serialized grids include `version`/`type` metadata (PGM-DS v1.11.0) and write `NaN` as JSON `null` (v1.10.3); older files still load.
+
 ## Visualizer Quickstart
 ```python
 from power_grid_model_ds.visualizer import visualize

@@ -28,7 +28,7 @@ Examples:
 - Constant value
 - `auto_id` references
 - `reference` lookup against another table
-- Built-in/custom function call mapping
+- Built-in function call mapping (custom functions are not supported, see below)
 - Nested function definitions
 
 ## AutoID Model
@@ -59,11 +59,16 @@ Example intent:
 Use filter functions in mapping to include/exclude rows per component generation.
 This is key for optional component creation from shared source tables.
 
+## Allowed Functions (PGM-IO v2)
+Custom functions in YAML mappings were removed in v2.0.0. Only these can be called:
+- non-mutating `pandas.DataFrame` member functions (for example `divide`)
+- functions in `power_grid_model_io.functions`, `.functions.filters` (for example `include_only_empty`) and `.functions.phase_to_phase`
+
+If a v1 mapping fails on a custom function: replace it with a pandas equivalent, else use a built-in function, else request it upstream.
+
 ## Security Guidance
-- Mapping files are loaded with `yaml.safe_load`.
-- No `eval` usage is allowed.
-- Functions must be loadable by explicit import path (for example `numpy.max`, not alias shorthand).
-- Treat mapping files as executable configuration with controlled write access.
+- Mapping files are loaded with `yaml.safe_load`; `eval` is not used.
+- Functions are restricted to the allow-list above, so a mapping cannot call arbitrary code.
 
 ## Troubleshooting Checklist
 1. Confirm all required source tables are present.

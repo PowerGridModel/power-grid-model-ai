@@ -10,7 +10,7 @@ description: "Use when: working on any power-grid-model ecosystem task, includin
 # Power Grid Model Ecosystem Operations
 
 ## Package Version Status
-Last reviewed: PGM v1.13.122 · PGM-DS v1.10.2 · PGM-IO v1.3.104 (checked 2026-07-20)
+Last reviewed: PGM v1.13.217 · PGM-DS v1.11.0 · PGM-IO v2.0.36 (checked 2026-10-30)
 
 This skill is for operations across the full `power-grid-model` ecosystem. The repositories are tools; the user request defines the task.
 

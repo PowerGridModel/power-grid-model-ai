@@ -56,6 +56,13 @@ Returns node IDs directly connected to the given node. Added in PGM-DS v1.10.1.
 connected = grid.graphs.active_graph.get_connected(node_id=56)
 ```
 
+### Breadth-first and depth-first search
+```python
+parents = grid.graphs.active_graph.bfs(source=56)       # int or sequence of node IDs
+parents = grid.graphs.active_graph.dfs(source=[56, 57])
+```
+Both return `dict[node_id, parent_id | None]`. Keys are in discovery order; the parent is `None` for a source not reached from another source. An unknown node raises `MissingNodeError`. Added in PGM-DS v1.10.3.
+
 ## Feeder and Substation Utilities
 
 ### Assign feeder IDs
