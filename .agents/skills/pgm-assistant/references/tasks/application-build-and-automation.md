@@ -6,59 +6,48 @@ SPDX-License-Identifier: MPL-2.0
 
 # Application Build and Automation
 
-## Purpose
+Use this playbook to build or extend a PGM-based workflow or application (for example import -> validate -> run -> export), not for a one-off calculation.
 
-Use this playbook when the goal is to build or extend a PGM-based workflow or application, not only to run a one-off calculation.
+## Layers
 
-## Typical Inputs
+1. Ingestion and conversion (PGM-IO).
+2. Validation gate (PGM validation APIs, then realism rules from `validation-rules.yml`).
+3. Grid manipulation and topology (PGM-DS).
+4. Calculation (PGM).
+5. Output adaptation, KPIs and reporting.
 
-- A desired capability (for example import -> validate -> run -> export)
-- Supported source data formats (PGM JSON, Vision, Pandapower, tabular)
-- Runtime constraints (batch size, latency, reproducibility)
-
-## Recommended Architecture
-
-1. Ingestion and conversion layer (PGM-IO).
-2. Validation gate (PGM validation APIs).
-3. Grid manipulation and topology layer (PGM-DS).
-4. Calculation layer (PGM).
-5. Output adaptation and reporting layer.
-
-## Build Sequence
-
-1. Choose converter and normalize datasets.
-2. Validate `input_data` and `update_data`.
-3. Create a reusable model execution function.
-4. Add task-specific post-processing (for example limits, KPIs, export adapters).
-5. Add error handling for partial batch failures.
-6. Persist reproducible artifacts (`input_data`, `update_data`, outputs, assumptions).
-
-## Minimal Workflow Skeleton
+## Workflow Skeleton
 
 ```python
-# 1) Convert to PGM-compatible data (PGM-IO)
+from power_grid_model import CalculationType, PowerGridModel
+from power_grid_model.validation import assert_valid_batch_data, assert_valid_input_data
+
+# 1) Convert to PGM datasets (PGM-IO); keep extra_info for traceability
 input_data, extra_info = converter.load_input_data(raw_source)
+update_data = converter.load_update_data(raw_update_source)  # optional
 
-# 2) Validate (PGM)
+# 2) Validate inputs and, for batches, the combination with update data
 assert_valid_input_data(input_data, calculation_type=CalculationType.power_flow, symmetric=True)
+assert_valid_batch_data(input_data, update_data, calculation_type=CalculationType.power_flow, symmetric=True)
 
-# 3) Build and run (PGM)
+# 3) Run
 model = PowerGridModel(input_data)
 out = model.calculate_power_flow(update_data=update_data)
 
-# 4) Optional grid sync and app-layer operations (PGM-DS)
-pgm_interface.update_grid(out)
-
-# 5) Export/adapt
-converter.save(data=out, extra_info=extra_info)
+# 4) Export: PgmJsonConverter can save any converter's output plus extra_info
+PgmJsonConverter(destination_file=destination).save(data=out, extra_info=extra_info)
 ```
+
+`save` is not implemented for Vision, tabular or pandapower converters; see `references/pgm-io/overview-and-converter-selection.md` for what each converter supports.
+
+To sync results into a PGM-DS `Grid`, use `PowerGridModelInterface(grid=grid)` with its own `calculate_power_flow()` followed by `update_grid()` (it takes no arguments and reads the interface's stored output); see `references/pgm-ds/pgm-interface-workflow.md`.
 
 ## Design Rules
 
-- Keep conversion, validation, execution, and reporting as separate steps.
-- Fail early at validation boundaries; do not postpone malformed data errors.
-- Use task-specific wrappers around `calculate_*` instead of hard-coding one method everywhere.
-- Keep `extra_info` for traceability across converters and outputs.
+- Keep conversion, validation, execution and reporting as separate steps; fail at the validation boundary.
+- Wrap `calculate_*` in a task-specific function (calculation type, symmetric flag, algorithm, tolerance as parameters) instead of hard-coding one method.
+- Handle partial batch failures explicitly (see `references/pgm/errors-and-debugging.md`).
+- Persist `input_data`, `update_data`, outputs and assumptions for reproducibility.
 
 ## Primary References
 

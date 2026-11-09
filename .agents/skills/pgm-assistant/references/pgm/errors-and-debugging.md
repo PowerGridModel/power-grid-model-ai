@@ -6,87 +6,52 @@ SPDX-License-Identifier: MPL-2.0
 
 # PGM Errors and Debugging
 
-For validation-first troubleshooting flow, see `../tasks/data-validation.md` before deep error triage.
+Run the validation-first flow in `../tasks/data-validation.md` before deep error triage.
 
-## High-Frequency Exceptions
+## Exception Classes
 
-### `PowerGridBatchError`
+Import from `power_grid_model.errors`. All derive from `PowerGridError` (a `RuntimeError`); catch the parent class to cover its children:
 
-Typical trigger:
+- `SparseMatrixError` > `NotObservableError`
+- `IterationDiverge` > `MaxIterationReached`
+- `InvalidID` > `IDNotFound`, `IDWrongType`, `ConflictID`, `InvalidMeasuredObject`, `InvalidRegulatedObject`
 
-- Some batch scenarios fail while others succeed.
+Messages are decoded into these classes; an unrecognised message becomes a plain `PowerGridError`. Validation failures raised by `assert_valid_*` are `ValidationException` (a `ValueError`), see `batch-validation-serialization.md`.
 
-Inspect:
+| Exception | Trigger | Action |
+| --- | --- | --- |
+| `IDNotFound` | Update references an id absent from the model. `IDWrongType` if the id belongs to another component type. | `validate_batch_data` reports both as `IdNotInDatasetError`. |
+| `ConflictVoltage` | A line connects nodes with different `u_rated`. The validators do not flag this. | Check `u_rated` of the line's two nodes. |
+| `NotObservableError` | State estimation without enough independent measurements, or no usable voltage sensor (none present, or all `u_sigma` = `inf`). The validators do not flag this. | Add a voltage sensor and enough power sensors; check for `inf` sigma. |
+| `SparseMatrixError` | Singular system matrix (message: "possibly singular matrix"). | Look for floating or ill-defined parts of the grid; in state estimation see `NotObservableError`. |
+| `IterationDiverge` | Iterative method (e.g. `newton_raphson`, `iterative_current`) does not converge in `max_iterations`. Linear methods do not iterate. | Validate data; adjust `error_tolerance` / `max_iterations`; compare with a linear method to isolate data problems. |
+| `PowerGridBatchError` | One or more batch scenarios fail with `continue_on_batch_error=False`. | See below. |
 
-- `failed_scenarios`
-- `succeeded_scenarios`
-- `error_messages`
-- `errors`
+## `PowerGridBatchError`
 
-Use:
+Attributes: `failed_scenarios` and `succeeded_scenarios` (index arrays), `error_messages` (`list[str]`), `errors` (typed exceptions, e.g. `IDNotFound`, aligned with `failed_scenarios`). Per-scenario causes (such as `IDNotFound` in an update) surface only inside `errors`; the raised class is always `PowerGridBatchError`.
 
-- Run with `continue_on_batch_error=True` to keep valid results.
+```python
+from power_grid_model import AttributeType, ComponentType
+from power_grid_model.errors import PowerGridBatchError
 
-### `IDNotFound`
+try:
+    out = model.calculate_power_flow(update_data=batch_update)
+except PowerGridBatchError as e:
+    print(e.failed_scenarios, e.error_messages)
 
-Typical trigger:
+# partial success: failed scenarios hold uninitialised rows
+out = model.calculate_power_flow(update_data=batch_update, continue_on_batch_error=True)
+e = model.batch_error  # None when every scenario succeeded
+if e is not None:
+    valid_u = out[ComponentType.node][AttributeType.u_pu][e.succeeded_scenarios]
+```
 
-- Update references IDs not present in base input.
+## Gotchas
 
-Action:
-
-- Validate with `assert_valid_batch_data` before calculation.
-- Confirm id columns and type alignment.
-
-### `ConflictVoltage`
-
-Typical trigger:
-
-- Inconsistent rated voltages across connected topology.
-
-Action:
-
-- Validate input data and inspect component-level voltage attributes.
-
-### `NotObservableError` or `SparseMatrixError` in state estimation
-
-Typical trigger:
-
-- Missing or non-independent measurements.
-
-Action:
-
-- Re-check observability conditions.
-- Ensure at least one valid voltage measurement.
-- Check sensor sigma values for accidentally disabled measurements (`inf`).
-
-### `MaxIterationReached` or `IterationDiverge`
-
-Typical trigger:
-
-- Iterative method cannot converge with current settings/data.
-
-Action:
-
-- Validate data.
-- Relax tolerance or increase max iterations.
-- Compare against linear method to identify data pathologies.
-
-## Important Behavioral Edge Cases
-
-- If `model.update(...)` fails, model can be left in an invalid state.
-- Discard and recreate model from known-good input after failed updates.
-- Batch results with failed scenarios can include unusable rows for those scenarios.
-- Filter outputs by `succeeded_scenarios`.
-
-## Debug Checklist
-
-1. Run validation (`assert_valid_input_data` / `assert_valid_batch_data`).
-2. Narrow output with `output_component_types` for focused inspection.
-3. Reproduce with single scenario (`get_dataset_scenario`).
-4. Check algorithm and mode assumptions (`symmetric` vs `asymmetric`, method compatibility).
-5. Inspect IDs and component references for update datasets.
-6. Recreate model if any update failed mid-run.
+- A failed `model.update(...)` can leave the model in an invalid state; recreate it from known-good input.
+- Reproduce one scenario with `model.update(update_data=get_dataset_scenario(update_data, k))` on a fresh model, then calculate without `update_data`.
+- `InvalidCalculationMethod`: the method does not exist for that calculation type (e.g. `iterative_linear` in power flow); an unknown method string raises `KeyError`.
 
 ## Calculation Logger (Opt-in Diagnostics)
 
@@ -95,33 +60,8 @@ from power_grid_model import Logger, LoggerType
 
 with Logger(LoggerType.info) as logger:
     model.calculate_power_flow()
-    print(logger.output)
+print(logger.output)
 ```
 
-- `LoggerType.info`: timestamped text messages. `LoggerType.benchmark`: timing per calculation phase.
-- Output is non-conclusive debugging hints, not a stable format; do not parse it.
-- Optional `python_logger=` forwards lines to a Python `logging.Logger` on exit, and then clears the buffer, so read `output` before exit if you need it.
-
-## Minimal Batch Error Pattern
-
-```python
-from power_grid_model.errors import PowerGridBatchError
-
-try:
-    out = model.calculate_power_flow(update_data=batch_update)
-except PowerGridBatchError as e:
-    print("failed:", e.failed_scenarios)
-    print("ok:", e.succeeded_scenarios)
-    print("messages:", e.error_messages)
-```
-
-## Minimal Partial-Success Pattern
-
-```python
-out = model.calculate_power_flow(
-    update_data=batch_update,
-    continue_on_batch_error=True,
-)
-e = model.batch_error
-valid_u = out[ComponentType.node][AttributeType.u_pu][e.succeeded_scenarios]
-```
+- `LoggerType.info` (default) yields timestamped lines; `LoggerType.benchmark` yields timing per calculation phase. The format is not stable; do not parse it.
+- `output` stays readable after the `with` block. With `python_logger=<logging.Logger>` (level `python_logging_level`, default `logging.INFO`) the lines are forwarded and the buffer is cleared on exit, so read `output` inside the block.

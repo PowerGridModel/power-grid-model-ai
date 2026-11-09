@@ -6,127 +6,102 @@ SPDX-License-Identifier: MPL-2.0
 
 # PGM Calculation Recipes
 
-## Recipe 1: One-Time Power Flow (Symmetric)
+Defaults and the valid `calculation_method` per calculation are in `overview-and-entrypoints.md`.
+
+## Recipe 1: Power Flow
 
 ```python
-from power_grid_model import CalculationMethod, ComponentType, PowerGridModel
+from power_grid_model import ComponentType, PowerGridModel
 
 model = PowerGridModel(input_data)
-out = model.calculate_power_flow(
-    symmetric=True,
-    calculation_method=CalculationMethod.newton_raphson,
-    error_tolerance=1e-8,
-    max_iterations=20,
-)
+out = model.calculate_power_flow()  # symmetric, Newton-Raphson
 node_result = out[ComponentType.node]
 ```
 
-Use this as the default for robust general-purpose studies.
+Pass `symmetric=False` for per-phase results (`u_pu` etc. get a trailing dimension of 3). Asymmetric calculation needs zero-sequence data (`r0`, `x0`, `c0`, `tan0` on lines): with NaN zero-sequence values it fails with `SparseMatrixError`.
 
-## Recipe 2: Power Flow with Selected Outputs
+## Recipe 2: Selected Outputs
 
 ```python
 from power_grid_model import AttributeType, ComponentType
 
 out = model.calculate_power_flow(
     output_component_types={
-        ComponentType.node: None,
-        ComponentType.line: [AttributeType.id, AttributeType.p_from],
+        ComponentType.node: None,  # row-based
+        ComponentType.line: [AttributeType.id, AttributeType.p_from],  # columnar dict
     }
 )
 ```
 
-Use when memory/time matters and only a few fields are required.
-
-## Recipe 3: Asymmetric Power Flow
+## Recipe 3: State Estimation
 
 ```python
-out = model.calculate_power_flow(symmetric=False)
+out = model.calculate_state_estimation()  # iterative_linear; or calculation_method=CalculationMethod.newton_raphson
 ```
 
-Use when per-phase effects or non-balanced conditions matter.
+Needs at least one voltage sensor and enough independent measurements for the unknowns; otherwise it raises `NotObservableError` ("No voltage sensor found!" / "Not enough measurements") or `SparseMatrixError`. Sensor results are `*_residual` attributes.
 
-## Recipe 4: State Estimation
+## Recipe 4: Short Circuit
+
+Short circuit needs `fault` components in `input_data`. Give every `source` a finite `sk` and an `rx_ratio`; NaN values silently default to `sk = 1e10` VA and `rx_ratio = 0.1` (and validation does not flag them), giving unrealistically large currents, so take `sk` from the user or state the assumed value.
 
 ```python
-from power_grid_model import CalculationMethod
-
-out = model.calculate_state_estimation(
-    symmetric=True,
-    calculation_method=CalculationMethod.iterative_linear,
+import numpy as np
+from power_grid_model import (
+    CalculationMethod, ComponentType, DatasetType, FaultPhase, FaultType,
+    PowerGridModel, ShortCircuitVoltageScaling, initialize_array,
 )
-```
 
-Switch to `CalculationMethod.newton_raphson` when measurement weighting and nonlinear effects need tighter treatment.
+# One inactive fault per node, activated one scenario at a time (batch over nodes)
+node_ids = input_data[ComponentType.node]["id"]
+n = len(node_ids)
+fault = initialize_array(DatasetType.input, ComponentType.fault, n)
+fault["id"] = fault_ids  # n ids not used by any other component
+fault["status"] = 0
+fault["fault_type"] = FaultType.three_phase
+fault["fault_phase"] = FaultPhase.abc
+fault["fault_object"] = node_ids
+model = PowerGridModel({**input_data, ComponentType.fault: fault})
 
-## Recipe 5: Short Circuit
-
-```python
-from power_grid_model import CalculationMethod, ShortCircuitVoltageScaling
+update = initialize_array(DatasetType.update, ComponentType.fault, (n, n))
+update["id"] = fault["id"]
+update["status"] = np.eye(n, dtype=int)
 
 out = model.calculate_short_circuit(
-    calculation_method=CalculationMethod.iec60909,
-    short_circuit_voltage_scaling=ShortCircuitVoltageScaling.maximum,
+    update_data={ComponentType.fault: update},
+    short_circuit_voltage_scaling=ShortCircuitVoltageScaling.maximum,  # .minimum for the c_min case
 )
 ```
 
-## Recipe 6: Regulated Power Flow with Tap Strategy
+Output notes:
+- Results are always per phase: `node["u_pu"]` is `(n_scenarios, n_nodes, 3)`, `line["i_from"]` is `(n_scenarios, n_lines, 3)`, `fault["i_f"]` is `(n_scenarios, n_faults, 3)`. Take the active fault's entry (`i_f[np.arange(n), np.arange(n)]`); a three-phase fault has equal values on all three phases, a single-phase-to-ground fault carries current on the faulted phase only. Node short-circuit output has no `p`/`q`.
+- Non-three-phase faults need zero-sequence line data (`r0`, `x0`, ...). Without it the calculation raises `SparseMatrixError`; in a batch this surfaces as `PowerGridBatchError`, and with `continue_on_batch_error=True` each scenario's `SparseMatrixError` is in `model.batch_error.errors`. Ask for or state the zero-sequence assumption.
+
+## Recipe 5: Regulated Power Flow (Tap Changing)
 
 ```python
-from power_grid_model import TapChangingStrategy
+from power_grid_model import ComponentType, TapChangingStrategy
 
-out = model.calculate_power_flow(
-    tap_changing_strategy=TapChangingStrategy.any_valid_tap,
-)
+out = model.calculate_power_flow(tap_changing_strategy=TapChangingStrategy.any_valid_tap)
+tap_pos = out[ComponentType.transformer_tap_regulator]["tap_pos"]
 ```
 
-Strategy options include:
+- Requires `transformer_tap_regulator` components; `u_set` and `u_band` are in volt (on the `control_side`), not per unit. If no tap position within `tap_min..tap_max` meets the band, the calculation raises `MaxIterationReached`.
+- Strategies: `disabled` (default; regulator `tap_pos` output is the null value -128), `any_valid_tap`, `min_voltage_tap`, `max_voltage_tap`, `fast_any_tap` (binary search).
+- The result is the optimal tap in the regulator output; the transformer's input `tap_pos` stays unchanged.
 
-- `disabled`
-- `any_valid_tap`
-- `min_voltage_tap`
-- `max_voltage_tap`
-- `fast_any_tap`
-
-## Recipe 7: Newton-Raphson Initialization (Flat Start)
+## Recipe 6: Newton-Raphson Flat Start
 
 ```python
-from power_grid_model import CalculationInitialization, CalculationMethod
+from power_grid_model import CalculationInitialization
 
-out = model.calculate_power_flow(
-    calculation_method=CalculationMethod.newton_raphson,
-    calculation_initialization=CalculationInitialization.flat,
-)
+out = model.calculate_power_flow(calculation_initialization=CalculationInitialization.flat)
 ```
 
-Use `flat` when the default linear start (the Newton-Raphson default) diverges on meshed, transmission-like grids. Other members: `linear`, `average_source`, `default`. The argument also accepts the member name as a string. Available since v1.13.185.
+Use `flat` when the default start (linear, for Newton-Raphson) diverges on meshed, transmission-like grids. Other members: `linear`, `average_source`, `default`. Only Newton-Raphson uses it. Available since v1.13.185.
 
-## Method Selection Guide
+## Method Selection
 
-- Start with Newton-Raphson for power flow unless you have a clear speed reason.
-- Use iterative current for time-series style batches on radial grids.
-- Use linear and linear_current for high-volume approximations, and verify against a nonlinear baseline.
-- For state estimation, iterative linear is default; Newton-Raphson is often preferred when nonlinear sensor weighting behavior matters.
-
-## Symmetric vs Asymmetric Practical Rules
-
-Symmetric:
-
-- Faster
-- Single value outputs per component attribute
-- Good default for balanced networks
-
-Asymmetric:
-
-- Per-phase modeling and outputs
-- Required for many non-three-phase short-circuit cases
-- Requires proper zero-sequence/per-phase parameters
-
-## State Estimation Observability Notes
-
-Practical requirements to check before running:
-
-- At least one voltage measurement available.
-- Sufficient independent measurements relative to unknown states.
-- If unobservable, expect `NotObservableError` or `SparseMatrixError`.
-
+- Power flow: Newton-Raphson by default; `iterative_current` suits time-series batches on radial grids; `linear` and `linear_current` are approximations (verify against a nonlinear baseline).
+- State estimation: `iterative_linear` by default; `newton_raphson` when measurement weighting with nonlinear effects matters.
+- The symmetric (default) calculation returns one value per attribute; asymmetric returns per-phase values and needs per-phase/zero-sequence parameters. Short circuit is always per phase.
