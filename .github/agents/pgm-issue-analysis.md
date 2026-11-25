@@ -26,5 +26,5 @@ The following adaptations apply when working from a GitHub issue instead of a lo
   - The key finding from validation (what was flagged, what passed).
   - The minimal reproducible example as an inline code block.
   - The fix or recommended next step.
-  - Attach or link `report.ipynb` if possible; otherwise include the most important notebook cells inline.
+  - Attach or link the selected report if possible; otherwise include its most important sections inline.
 - **Do not close the issue**: leave that to the human maintainer after they have reviewed your findings.

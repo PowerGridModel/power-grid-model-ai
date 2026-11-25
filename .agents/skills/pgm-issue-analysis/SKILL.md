@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 name: pgm-issue-analysis
-description: "Use when: a user reports an error, unexpected result, or suspicious behaviour when working with power-grid-model (PGM). Analyses whether the root cause is bad input data or a PGM internal bug, then produces a minimal reproducible example and a Jupyter notebook report."
+description: "Use when: a user reports an error, unexpected result, or suspicious behaviour when working with power-grid-model (PGM). Analyses whether the root cause is bad input data or a PGM internal bug, then produces a minimal reproducible example and a report."
 ---
 
 # PGM Issue Analysis
@@ -17,7 +17,7 @@ You are a **power-grid-model (PGM) core developer** and **distribution-network e
 2. Investigate the data.
 3. Run validation functions.
 4. Reduce the dataset to the smallest possible case that still fails.
-5. Deliver a clear Jupyter notebook report that any PGM maintainer can open and run to understand the issue.
+5. Deliver a clear report that any PGM maintainer can open and run to understand the issue.
 
 The steps are not strictly to be performed in order if you need you can first do "investigate the data", or later go back to this. But in general try to do the steps one by one.
 Throughout the investigation, keep the following question in mind and answer it explicitly in your final report:
@@ -27,6 +27,12 @@ Throughout the investigation, keep the following question in mind and answer it 
 ---
 
 ## Investigation Workflow
+
+Before starting the investigation, ask the user:
+
+> "For the final report, I recommend a Jupyter notebook (`.ipynb`) with the findings and relevant outputs. Would you prefer that, a Python script (`.py`), or a Python script with interactive `# %%` cells (`.py`)? I recommend using separate Python scripts for the investigation regardless of the report format."
+
+Wait for the answer and use the selected format for the report; use a notebook by default if the user has no preference. The investigation itself uses numbered Python scripts.
 
 Work through all steps in order. Use small Python scripts for each step; save them in the working directory so the user can inspect them.
 For each step create a python file named: "step1_reproduce.py", etc..
@@ -55,7 +61,7 @@ What to verify:
 
 ### Step 2 — Understand the data
 
-> **Note for the user**: This step is internal investigation — you are building a mental model of the network before touching validation or reduction. The script output is for your own understanding; do not present it to the user as a result, but leave this file in the dir for the user to see if needed. Findings from this step feed directly into Step 3 and the notebook report.
+> **Note for the user**: This step is internal investigation — you are building a mental model of the network before touching validation or reduction. The script output is for your own understanding; do not present it to the user as a result, but leave this file in the dir for the user to see if needed. Findings from this step feed directly into Step 3 and the report.
 
 Before trying to minimise or validate anything, build a structural picture of the network. Write a script that prints:
 
@@ -244,13 +250,13 @@ After running all checks, summarise which ones flagged issues and which passed. 
 
 #### Running and capturing output
 
-Run the validation script and pipe its output to a file so the full results are preserved for the notebook report:
+Run the validation script and pipe its output to a file so the full results are preserved for the report:
 
 ```bash
 uv run python step3_validate.py > step3_validation_output.txt 2>&1
 ```
 
-Then read `step3_validation_output.txt` to review the findings before writing the notebook.
+Then read `step3_validation_output.txt` to review the findings before writing the report.
 
 ### Step 4 — Produce a minimal reproducible example
 
@@ -284,9 +290,16 @@ Classify the root cause:
 
 ---
 
-## Output: Jupyter Notebook Report
+## Output: Report
 
-Create a Jupyter notebook in the working directory named `report.ipynb`. Structure it with the following cells:
+Generate the report from the investigation scripts and their findings, reusing or adapting the relevant tested code rather than repeating the investigation. Keep the minimal reproducible example self-contained, and verify that the report runs in the selected format.
+
+Create the report in the working directory in the selected format:
+- For a plain Python script, use `report.py`, comment headings and explanatory text, and follow the Python code style above.
+- For an interactive Python script, use `report.py`, separate logical cells with `# %%`, optionally use `# %% [markdown]` for commented markdown, and follow the Python code style above.
+- For a Jupyter notebook, use `report.ipynb` with markdown and code cells, saving relevant outputs.
+
+Cover the following sections. In Python scripts, include relevant findings as comments or printed output; scripts do not preserve rendered outputs.
 
 **Markdown — Title and summary**
 ```
@@ -301,7 +314,7 @@ Create a Jupyter notebook in the working directory named `report.ipynb`. Structu
 Brief description: voltage levels, component counts, notable topology features.
 
 **Code — Load and inspect original data**  
-The Step 2 diagnostics. Cell output should be saved so a reviewer does not need to re-run.
+The Step 2 diagnostics. In a notebook, save cell output so a reviewer does not need to re-run.
 
 **Markdown — Validation findings**  
 Summary of what each validation check found: what passed, what flagged.
@@ -313,7 +326,7 @@ The Step 3 checks, condensed to the most relevant ones for this network.
 Plain-language explanation of the root cause, then the supporting numbers.
 
 **Code — Reproduce the error**  
-The exact call that crashes or produces the wrong result. No try/except.
+The exact call that crashes or produces the wrong result. No try/except. If the call crashes, make it independently executable and do not invoke it in the report's normal top-to-bottom run, so later sections remain runnable.
 
 **Markdown — Minimal reproducible example**  
 What was stripped away and why the minimal case is sufficient.
@@ -331,7 +344,7 @@ The corrected data and a power flow that succeeds with physically plausible resu
 - **Immediate fix**: [specific actionable change]
 - **How to avoid this class of issue**: [general guidance]
 - **If the error persists after fixing the data**: open a GitHub issue on the
-  power-grid-model repository with this notebook attached, including the PGM
+  power-grid-model repository with this report attached, including the PGM
   version and the minimal reproducible example.
 - **Further investigation**: [open questions or things the maintainer team should look at]
 ```
@@ -345,6 +358,6 @@ The corrected data and a power flow that succeeds with physically plausible resu
 - [ ] A comprehensive validation script was written and run; findings were summarised (Step 3).
 - [ ] A minimal reproducible example was produced using `initialize_array` (Step 4).
 - [ ] The root cause was classified as user data bug or potential PGM bug (Step 5).
-- [ ] A `report.ipynb` notebook was created covering all sections above.
-- [ ] The notebook runs top-to-bottom without errors up to (and including) the intentional crash cell.
+- [ ] The report format was confirmed with the user, and `report.py` or `report.ipynb` was created covering all sections above.
+- [ ] The report runs top-to-bottom without errors, with any intentional crash independently reproducible.
 - [ ] Tips and next steps are concrete and actionable.
