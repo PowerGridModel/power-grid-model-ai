@@ -45,7 +45,7 @@ It follows a structured five-step investigation workflow:
 4. **Minimal reproducible example** — reduce the dataset to the fewest components that still trigger the failure
 5. **Diagnose** — classify the root cause as a user data bug or a potential PGM bug
 
-The skill produces a `report.ipynb` Jupyter notebook with its findings. Each investigation step is also saved as a numbered Python script (`step1_reproduce.py`, etc.) for full traceability.
+The skill recommends a Jupyter notebook for the report by default, while also offering a plain Python script or a Python script with interactive `# %%` cells. The investigation uses numbered Python scripts (`step1_reproduce.py`, etc.) for traceability; the report can be generated from their tested code and findings.
 
 Example prompt how to use the skill:
 

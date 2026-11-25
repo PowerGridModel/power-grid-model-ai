@@ -50,9 +50,12 @@ Use the following task-first workflow.
 ## Step 0: Clarify Output Format
 Before writing any code, ask the user:
 
-> "Should I write this as a Python script (`.py`) or a Jupyter notebook (`.ipynb`)?"
+> "Should I write this as a Python script (`.py`), a Python script with interactive `# %%` cells (`.py`), or a Jupyter notebook (`.ipynb`)?"
 
-Wait for the answer and apply the appropriate standard (see **Python Script Standards** above for `.py`; use logical cell structure with markdown headings for `.ipynb`).
+Wait for the answer and apply the appropriate standard:
+- For either `.py` option, follow **Python Script Standards** above.
+- For interactive `.py` cells, use `# %%` to separate logical cells and optionally `# %% [markdown]` for commented markdown headings.
+- For `.ipynb`, use a logical cell structure with markdown headings.
 
 ## Step 1: Classify the Task
 Classify the user request into one or more of the following tasks:
@@ -108,7 +111,7 @@ Always return task-appropriate outputs:
 - Summaries/charts and interpretation for result-explanation tasks.
 
 ## Completion Criteria
-- [ ] Output format (`.py` or `.ipynb`) was confirmed with the user before writing code.
+- [ ] Output format (plain `.py`, `.py` with `# %%` cells, or `.ipynb`) was confirmed with the user before writing code.
 - [ ] The user request was classified into the correct PGM task(s).
 - [ ] Data was deserialized/converted and validated where required.
 - [ ] Appropriate ecosystem layers (PGM/PGM-DS/PGM-IO) were used for the task.
