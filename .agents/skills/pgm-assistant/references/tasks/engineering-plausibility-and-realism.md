@@ -6,91 +6,47 @@ SPDX-License-Identifier: MPL-2.0
 
 # Engineering Plausibility and Realism Screening
 
-## Purpose
+Realism screening catches data and results that PGM solves but that are operationally implausible. It complements PGM structural validation (`validate_input_data` / `validate_batch_data`); never re-implement structural checks as realism rules.
 
-Use this playbook when you need to catch values and combinations that are mathematically solvable but operationally unrealistic.
+`validation-rules.yml` is the single source of truth for rules (`id`, `stage`, `target`, `confidence`, `severity`, `recommended_action`), thresholds, profiles (`default`, `distribution_mv`, `distribution_hv`, `transmission`), confidence meanings and required report fields. Do not copy numeric thresholds into prose or code.
 
-This layer complements (not replaces) PGM structural validation.
+## Workflow
 
-Structural/concrete checks should be reported from `validate_input_data` and `validate_batch_data` outputs, not duplicated in YAML realism checks.
+1. Run PGM structural validation first; report its findings with `source=pgm_validator`.
+2. Resolve the active profile (below) and run the YAML rules for the relevant `stage` (`input`, `update`, `output`).
+3. Report YAML findings with `source=yaml_realism`, `check_class=heuristic` and the rule's `confidence`; when local context is missing, lower confidence instead of over-asserting.
+4. Report component-level and system-level findings with likely cause and corrective action.
+5. Present heuristic findings as review-required; do not auto-reject data.
 
-## Validation Classes and Confidence
+## Resolving Thresholds
 
-Use two explicit classes for every finding:
+```python
+import copy, yaml
 
-- `heuristic`: context-dependent plausibility checks based on typical grid practice.
-  - Typical confidence: `medium` or `low`.
+cfg = yaml.safe_load(open(".agents/skills/pgm-assistant/references/tasks/validation-rules.yml"))
 
-Confidence meaning:
+def thresholds(profile="default"):
+    t = copy.deepcopy(cfg["profiles"]["default"]["thresholds"])
+    for group, values in cfg["profiles"][profile].get("threshold_overrides", {}).items():
+        t[group].update(values)
+    return t
+```
 
-- `high`: highly suspicious across most practical grids.
-- `medium`: often suspicious, but could be valid in specific contexts.
-- `low`: weak prior; requires project context confirmation.
+A rule's `thresholds` values are paths into the default profile; read the effective value from `thresholds(profile)`.
 
-## Scope by Stage
+## PGM Gotchas for Rule Implementation
 
-### Input stage (before model construction)
+- Units are SI (V, A, W, var, VA, ohm). Per-unit thresholds need conversion: `u_pu` is an output attribute, but `transformer_tap_regulator.u_set`/`u_band` (V) and `tap_size` (V) must be divided by the relevant `u_rated`/tap-side voltage.
+- Asymmetric line matrices are lower-triangular by construction (`r_ba`, `r_ca`, `r_cb`, ...), so they cannot be non-reciprocal.
+- Sensor sigma attributes: `u_sigma`; `p_sigma`/`q_sigma`/`power_sigma`; `i_sigma`/`i_angle_sigma`. Unused ones are NaN; skip NaN before range checks.
+- Sensor outputs carry raw residuals (`u_residual`, `p_residual`, `q_residual`, `i_residual`, and `*_angle_residual`), in measurement units. Normalized residual = residual / matching sigma and must be computed by the caller.
+- Nodes without a path to a source have `energized == 0` and `u_pu == 0`; mask them before voltage rules and count them for the islanding rule.
+- Reference directions: positive `p_specified` of `sym_load`/`asym_load` is consumption, of `sym_gen` and `source` is injection; output `p` follows the same direction per appliance. Branch `p_from`/`p_to` are positive into the branch, so `p_from + p_to` is the branch loss.
+- `loading` is defined for branches only (line, transformer, link, generic_branch, and three-winding transformer where it is the maximum of `loading_1/2/3`): `max(i_from, i_to) / i_n` for lines, `max(s_from, s_to) / sn` for transformers. Short-circuit outputs contain no `loading`, `p` or `q`.
 
-Focus on physically meaningful parameterization:
+## Finding Record
 
-- Extreme cable/branch impedance values.
-- Implausible transformer voltage levels and ratios.
-- Weird winding and clock combinations.
-- Weird tap settings (`tap_min`, `tap_max`, `tap_pos`, `tap_size`, `tap_nom`).
-- Unrealistic off-nominal ratio `k` and phase shift `theta` for `generic_branch`.
-- Source parameters (`sk`, `rx_ratio`, `z01_ratio`) inconsistent with expected grid connection strength.
-- Zero-sequence values inconsistent with positive-sequence values.
-- Asymmetric line matrix values that are numerically possible but physically odd.
-- Sensor sigma values too small (numerical risk) or too large (low information value).
-
-### Update stage (scenario changes)
-
-Focus on operational continuity and switching realism:
-
-- Sudden mass de-energization and widespread status flips.
-- Large tap jumps between neighboring scenarios.
-- Large load or generation step changes without known event markers.
-- Widespread regulator setpoint shifts (`u_set`, `u_band`) beyond operational norms.
-
-### Output stage (post-calculation)
-
-Focus on outcome realism and anomaly explanation:
-
-- Mass de-energized islands and likely causes.
-- Extreme voltage/current/loading values by absolute and relative criteria.
-- Implausible aggregate net injections or source burdening.
-- State estimation residual patterns indicating untrusted measurements.
-- Results that satisfy equations but violate expected grid operating behavior.
-
-## Recommended Workflow
-
-1. Run PGM structural validation first.
-2. Run realism checks using `.agents/skills/pgm-assistant/references/tasks/validation-rules.yml`.
-3. Tag findings as `heuristic` with confidence (`high`, `medium`, `low`).
-4. Report both component-level findings and system-level findings.
-5. Provide likely causes and targeted corrective actions.
-
-## Finding Record Template
-
-Use this schema in reports:
-
-- `id`: unique rule ID.
-- `source`: `pgm_validator` or `yaml_realism`.
-- `check_class`: use `heuristic` for YAML findings.
-- `confidence`: `high`/`medium`/`low`.
-- `severity`: `error`/`warning`/`info`.
-- `stage`: `input`/`update`/`output`.
-- `component_type`: for example `line`, `transformer`, `source`, `sym_load`.
-- `component_id`: affected ID if applicable.
-- `message`: concise issue statement.
-- `evidence`: key values and thresholds.
-- `recommended_action`: what to fix or verify next.
-
-## Practical Notes
-
-- Do not auto-reject all `heuristic` findings; present them as review-required.
-- Keep profile-specific thresholds (distribution vs transmission) in YAML, not hard-coded in prose.
-- If context is missing, lower confidence rather than over-asserting.
+Fields are listed in `validation-rules.yml` under `reporting.required_fields`. Values: `source` is `pgm_validator` or `yaml_realism`; `check_class` is `heuristic` for YAML findings; `severity` is `error`/`warning`/`info`; `stage` is `input`/`update`/`output`; `evidence` holds key values and thresholds.
 
 ## Related References
 

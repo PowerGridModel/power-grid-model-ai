@@ -6,61 +6,43 @@ SPDX-License-Identifier: MPL-2.0
 
 # Vision Conversion Guide (PGM-IO)
 
-## Standard Vision Workflow
-1. Export Vision model to Excel.
-2. Create converter:
+## Workflow
 ```python
-from power_grid_model_io.converters import VisionExcelConverter
+from power_grid_model import PowerGridModel
+from power_grid_model_io.converters import PgmJsonConverter, VisionExcelConverter
 
 converter = VisionExcelConverter(source_file="path/to/vision.xlsx", language="en")
 input_data, extra_info = converter.load_input_data()
+# validate_input_data(input_data), then:
+output_data = PowerGridModel(input_data).calculate_power_flow()
+PgmJsonConverter(destination_file="result.json").save(output_data, extra_info=extra_info)
 ```
-3. Validate input data with PGM validation.
-4. Run PGM calculation.
-5. Save output with `PgmJsonConverter` or convert as needed.
+- `VisionExcelConverter(source_file=None, language="en", terms_changed=None, mapping_file=None, log_level=...)`: `language` is `"en"` or `"nl"` and selects the shipped `config/excel/vision_{language}.yaml`; other values raise `FileNotFoundError`.
+- `convert(output_data)` returns `TabularData`, not Excel; extra_info is not supported there ([overview-and-converter-selection.md](overview-and-converter-selection.md)). Persist results with `PgmJsonConverter` as above or with `json_serialize_to_file`.
+- The mapping logic (`grid`, `units`, `auto_id`, ...) is documented in [tabular-mapping-reference.md](tabular-mapping-reference.md); `VisionExcelFileStore` reads the second header row as units.
+- Sheets without a mapping entry are ignored; a sheet name that differs between Vision versions or languages silently yields no components.
+
+## Column and Term Variants
+`terms_changed={"exported name": "name used in mapping"}` renames Excel columns before mapping, e.g. `VisionExcelConverter(source_file=..., terms_changed={"Un": "Unom"})`.
+Duplicate column names on one sheet (for example two `P` columns) are renamed `P_2`, `P_3`, ... with a logged warning; point the mapping at the renamed column if the second one is needed.
+
+## GUID Exports (Vision 9.7+)
+- `ExcelFileStore` inserts an integer column after every column whose name ends with `GUID`: `GUID` -> `Number` (`Nummer` for `nl`) and `From.GUID` -> `From.Number`; on appliance sheets (Loads, Sources, Transformer loads, ...) a plain `GUID` column becomes `Subnumber`. Integers are assigned in order of first appearance, shared across sheets.
+- The default `vision_en.yaml` / `vision_nl.yaml` mappings keep no GUID. Shipped GUID mappings: `config/excel/vision_en_9_7.yaml` and `vision_en_9_8.yaml` (both add `GUID` to the node `extra`; no `nl` variants in 2.0.27). Select one with `mapping_file`:
+  ```python
+  import power_grid_model_io
+  from pathlib import Path
+  mapping = Path(power_grid_model_io.__file__).parent / "config" / "excel" / "vision_en_9_8.yaml"
+  converter = VisionExcelConverter(source_file="vision.xlsx", mapping_file=mapping)
+  ```
+- Under `extra`, `{optional_extra: [GUID, StationID]}` includes columns only when present; plain `extra` columns must exist or conversion fails.
 
 ## Cross-Reference Helpers
-Use these to map generated PGM integer IDs back to Vision identifiers:
-- `lookup_id(pgm_id)`
-- `get_node_id(number)`
-- `get_branch_id(table, number)`
+Available when the mapping has an `id_reference` block (the shipped ones do); PGM ids are sequential from 0:
+- `lookup_id(pgm_id)` -> `{"table": ..., "key": {...}}` (plus `"name"` for virtual objects)
+- `get_node_id(number)`, `get_branch_id(table, number)`
 - `get_appliance_id(table, node_number, sub_number)`
-- `get_virtual_id(table, obj_name, node_number, sub_number)`
+- `get_virtual_id(table, obj_name, node_number, sub_number)`: generated objects such as the internal node of a `Transformer loads` row.
 
-## Language and Term Variants
-- Default mapping supports English and Dutch workflows.
-- Use `terms_changed` when Vision export uses alternate column names.
-
-## GUID Handling (Vision 9.7+)
-Vision switched to GUID-based identifiers.
-PGM-IO converts GUIDs to integer IDs internally and can keep GUID in `extra_info` when configured in mapping.
-
-## Optional Extra Columns
-Use `optional_extra` in mapping when metadata columns may be absent.
-- Required `extra` fields fail if missing.
-- `optional_extra` fields are included only when present.
-
-## Known Modeling Differences
-Expect minor differences against Vision due to model differences, including:
-- Transformer load modeling details
-- Angle handling in symmetric power flow (transformer clock effects)
-- Unsupported or approximated features (for example PV behavior details)
-- Different convergence criteria between tools
-
-## Known Spreadsheet Issues
-- Duplicate `P` columns can appear in exports.
-  - Mapping may need manual adjustment to renamed columns (`P_2`, etc.).
-- Sheet naming can vary between versions.
-  - Unmapped sheets are ignored.
-
-## Security Notes
-Vision converter inherits tabular security controls:
-- safe YAML loading
-- explicit function import paths
-- safe XML parsing behavior
-
-## Practical Checklist Before Production Runs
-1. Confirm correct language/mapping version.
-2. Verify required sheets are mapped.
-3. Add optional metadata fields (GUID, StationID) where useful.
-4. Keep `extra_info` in output pipeline for traceability.
+## Known Differences to Vision Results
+Expect small deviations from Vision (model differences, not conversion bugs): transformer load modelling, voltage angles in symmetric power flow (transformer clock), approximated PV behaviour, and different convergence criteria.

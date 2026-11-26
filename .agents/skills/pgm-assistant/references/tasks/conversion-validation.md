@@ -6,51 +6,46 @@ SPDX-License-Identifier: MPL-2.0
 
 # Conversion Validation
 
-## Purpose
+Use this playbook to validate conversion of external datasets (Vision, pandapower, PGM JSON) into PGM datasets before model construction. Converter usage lives in `../pgm-io/`; PGM structural validation and realism screening are in `data-validation.md`.
 
-Use this playbook when the primary task is validating conversion/parsing from external datasets into PGM-compatible datasets before model construction and calculation runs.
+## Stages
 
-## Scope
+1. Run the converter and handle its failures (below).
+2. Check converted data: `input_data` from `load_input_data()`, `update_data` from `load_update_data()`, and `extra_info` kept for traceability.
+3. Hand off to `data-validation.md` before long batch studies.
 
-This playbook covers conversion-side checks only:
+## Converter Failure Modes
 
-- Source parsing and mapping assumptions.
-- Identifier continuity and optional vs required field handling.
-- Converter-specific caveats and unsupported feature handling.
-- Converted dataset type/schema consistency before model construction.
+The cases below raise; wrap the load call and report the exception with its source record.
 
-Out of scope:
+- PGM JSON: `PgmJsonConverter` expects the PGM-IO layout; a plain PGM-serialized file (top-level `version`/`type`/`data`) raises `PowerGridSerializationError`. Load such files with `power_grid_model.utils.json_deserialize_from_file(Path(...))`.
+- Tabular/Vision (YAML mapping): a missing `grid` mapping, a mapping file that is not `.yaml`, or a mapped column absent from the source table raises `KeyError`/`ValueError` (message names the table and column).
+- Pandapower: unsupported features raise `NotImplementedError` (delta loads, storage, impedance, extended ward, DC line) or `RuntimeError` (tap-dependent impedance, tap at star point). This list comes from reading `power_grid_model_io` 2.0.27; pandapower is not installed here, so it was not executed.
 
-- PGM structural validation via `validate_input_data` / `validate_batch_data`.
-- Engineering realism screening driven by `validation-rules.yml`.
+## Handoff Recipe
 
-## Conversion Validation Stages
+```python
+from power_grid_model import CalculationType
+from power_grid_model.validation import errors_to_string, validate_input_data
 
-1. Source parsing and mapping validation (PGM-IO converter level).
-2. Converted dataset integrity checks (required attributes, IDs, dataset types).
-3. Handoff to PGM structural validation and realism screening.
+input_data, extra_info = converter.load_input_data()
+errors = validate_input_data(input_data, calculation_type=CalculationType.power_flow)
+labels = {pgm_id: info["name"] for pgm_id, info in extra_info.items() if "name" in info}
+print(errors_to_string(errors, name="input_data", details=True, id_lookup=labels))
+```
 
-## Conversion-Specific Validation Checkpoints
+`extra_info` is keyed by PGM id, so `id_lookup` shows source labels instead of bare ids in the report. Verified with `PgmJsonConverter`; the attributes stored in `extra_info` (here `name`; Vision stores `Name`) differ per converter and mapping.
 
-- Vision: mapping language, sheet coverage, GUID handling, optional vs required fields.
-- Pandapower: required electrical parameters, unsupported features, roundtrip consistency.
-- PGM JSON: dataset type and schema consistency before model construction.
+## Deliverables
 
-After conversion checks, run `data-validation.md` (PGM structural + batch validation) and then realism checks from `validation-rules.yml` before long batch studies.
-
-## Typical Conversion Deliverables
-
-- Conversion status (pass/fail) per source dataset.
-- Converter warnings/errors with source-record context.
-- Rejected or defaulted source records with reasons.
-- Corrective-action proposals (mapping fixes, missing parameter completion, source cleanup).
-- Handoff package for PGM validation (`input_data`, optional `update_data`, and assumptions log).
+- Pass/fail per source dataset, with converter exceptions and source-record context.
+- Rejected or defaulted source records with reasons, and corrective actions (mapping fixes, missing parameters, source cleanup).
+- Handoff package for PGM validation: `input_data`, optional `update_data`, `extra_info` and an assumptions log.
 
 ## Related References
 
 - `references/pgm-io/overview-and-converter-selection.md`
 - `references/pgm-io/vision-conversion-guide.md`
 - `references/pgm-io/pandapower-conversion-guide.md`
-- `references/pgm-io/pgm-json-and-data-stores.md`
 - `references/tasks/data-validation.md`
 - `references/tasks/engineering-plausibility-and-realism.md`

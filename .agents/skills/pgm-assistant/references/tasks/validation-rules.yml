@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: MPL-2.0
 
+# Effective thresholds = profiles.default.thresholds overlaid with the selected
+# profile's threshold_overrides. Rule `thresholds` values are paths into the default profile.
+# `*_warn` -> finding at the rule's severity; `*_error` / `*_severe` -> escalate to severity error.
+# Values are SI/pu as noted: tap_size_pu_* = tap_size / u_rated of the tap side;
+# tap_span_steps_warn applies to tap_max - tap_min; regulator_*_pu = u_set / u_band divided by the
+# regulated node's u_rated (PGM stores them in volts).
 schema_version: 2
 name: pgm_realism_validation_rules
 purpose: >-
@@ -52,7 +58,7 @@ profiles:
       line:
         r1_abs_ohm_warn: 50.0
         x1_abs_ohm_warn: 50.0
-        tan_abs_warn: 0.30
+        tan_abs_warn: 0.05
         r0_r1_ratio_min: 0.10
         r0_r1_ratio_max: 10.0
         x0_x1_ratio_min: 0.10
@@ -61,7 +67,6 @@ profiles:
         c0_c1_ratio_max: 10.0
       asym_line:
         mutual_to_self_abs_max: 1.0
-        reciprocity_relative_tol: 0.20
       transformer:
         voltage_ratio_warn: 50.0
         voltage_ratio_error: 200.0
@@ -89,9 +94,7 @@ profiles:
         sk_to_total_load_mva_warn_min: 1.5
       load_gen:
         power_factor_abs_warn_min: 0.50
-        q_to_p_abs_warn_max: 2.0
         phase_imbalance_ratio_warn: 2.0
-        max_step_change_fraction_warn: 0.50
       shunt:
         g1_to_b1_abs_ratio_warn_max: 0.50
       sensor:
@@ -104,7 +107,6 @@ profiles:
         max_fault_count_per_scenario_warn: 3
       update:
         max_status_flip_fraction_warn: 0.30
-        max_deenergized_fraction_warn: 0.40
         max_tap_step_jump_warn: 5
         max_total_load_change_fraction_warn: 0.50
         max_total_gen_change_fraction_warn: 0.50
@@ -113,7 +115,6 @@ profiles:
         max_source_to_total_load_ratio_warn: 5.0
         max_net_loss_to_total_load_ratio_warn: 0.20
         max_residual_normalized_warn: 6.0
-        min_energized_fraction_warn: 0.60
 
   distribution_mv:
     description: Medium-voltage distribution operations.
@@ -154,6 +155,8 @@ profiles:
         sk_to_total_load_mva_warn_min: 3.0
       update:
         max_status_flip_fraction_warn: 0.10
+      output:
+        max_net_loss_to_total_load_ratio_warn: 0.05
 
 rules:
   - id: R-HEU-001
@@ -209,18 +212,6 @@ rules:
     thresholds:
       mutual_to_self_abs_max: profiles.default.thresholds.asym_line.mutual_to_self_abs_max
     recommended_action: Verify phase-coupling matrix construction and source units.
-
-  - id: R-HEU-005
-    enabled: true
-    check_class: heuristic
-    confidence: medium
-    severity: warning
-    stage: [input]
-    target: asym_line
-    description: Asymmetric line matrix reciprocity is weak (off-diagonal mismatch).
-    thresholds:
-      reciprocity_relative_tol: profiles.default.thresholds.asym_line.reciprocity_relative_tol
-    recommended_action: Recheck matrix assembly and phase ordering.
 
   - id: R-HEU-006
     enabled: true
@@ -358,22 +349,10 @@ rules:
     severity: warning
     stage: [input, update]
     target: load_gen
-    description: Apparent power factor is unusually low.
+    description: Power factor p/s is unusually low (also covers high q/p).
     thresholds:
       power_factor_abs_warn_min: profiles.default.thresholds.load_gen.power_factor_abs_warn_min
     recommended_action: Verify sign conventions and P/Q attribution.
-
-  - id: R-HEU-017
-    enabled: true
-    check_class: heuristic
-    confidence: medium
-    severity: warning
-    stage: [input, update]
-    target: load_gen
-    description: Q-to-P ratio is unusually high.
-    thresholds:
-      q_to_p_abs_warn_max: profiles.default.thresholds.load_gen.q_to_p_abs_warn_max
-    recommended_action: Recheck reactive model assumptions and compensation devices.
 
   - id: R-HEU-018
     enabled: true
@@ -430,7 +409,7 @@ rules:
     severity: warning
     stage: [input]
     target: sensors
-    description: Measurement density appears low for robust state estimation.
+    description: Measurement density (sensor count / node count) appears low for robust state estimation.
     thresholds:
       min_measurement_density_warn: profiles.default.thresholds.sensor.min_measurement_density_warn
     recommended_action: Add strategically placed measurements for observability robustness.
@@ -580,11 +559,9 @@ rules:
     severity: warning
     stage: [output]
     target: energization
-    description: Mass de-energized islands detected.
+    description: Fraction of nodes with energized == 0 is high.
     thresholds:
-      max_deenergized_fraction_warn: profiles.default.thresholds.update.max_deenergized_fraction_warn
       max_islanded_fraction_warn: profiles.default.thresholds.output.max_islanded_fraction_warn
-      min_energized_fraction_warn: profiles.default.thresholds.output.min_energized_fraction_warn
     recommended_action: Trace source connectivity and switch-state causes.
 
   - id: R-HEU-035
@@ -618,7 +595,7 @@ rules:
     severity: warning
     stage: [output]
     target: state_estimation_residuals
-    description: Normalized residuals indicate potential model/measurement mismatch.
+    description: Normalized residuals (sensor residual / sigma, computed by the caller) indicate potential model/measurement mismatch.
     thresholds:
       max_residual_normalized_warn: profiles.default.thresholds.output.max_residual_normalized_warn
     recommended_action: Audit sigma settings, sensor health, and topology assumptions.
@@ -626,6 +603,7 @@ rules:
 reporting:
   required_fields:
     - id
+    - source
     - check_class
     - confidence
     - severity
